@@ -18,7 +18,7 @@ export default function App() {
   const [selectedDiseaseId, setSelectedDiseaseId] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTagFilter, setSelectedTagFilter] = useState(null);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false); // Телефонда автоматты жабық тұру үшін false
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [saveStatus, setSaveStatus] = useState('synced');
   const [openSections, setOpenSections] = useState({});
 
@@ -238,18 +238,27 @@ export default function App() {
     });
   };
 
+  // Мәтінді өзгерту (Тек админ/сессия болғанда ғана істей алады, болмаса пароль сұрайды)
   const handleUpdateSubSectionContent = (subId, newContent) => {
-    // Мәтінді өзгертпес бұрын авторлануды (парольді) тексеру
-    requireAuth(() => {
-      setNotes(prev => prev.map(n => ({
-        ...n,
-        sections: n.sections.map(s => s.id === subId ? { ...s, content: newContent } : s)
-      })));
-    });
+    if (!session) {
+      requireAuth(() => {
+        updateStateContent(subId, newContent);
+      });
+      return;
+    }
+    updateStateContent(subId, newContent);
   };
 
+  const updateStateContent = (subId, newContent) => {
+    setNotes(prev => prev.map(n => ({
+      ...n,
+      sections: n.sections.map(s => s.id === subId ? { ...s, content: newContent } : s)
+    })));
+  };
+
+  // Өрістен шыққанда (blur) бұлтқа сақтау — тек сессия болса ғана
   const saveContentToCloud = async (subId, content) => {
-    if (!session) return; // Егер сессия болмаса сақтамайды
+    if (!session) return; 
     setSaveStatus('saving');
     try {
       const { error } = await supabase
@@ -459,7 +468,7 @@ export default function App() {
         </div>
       )}
 
-      {/* Sidebar - Телефонда толық адаптивті болуы үшін */}
+      {/* Sidebar */}
       <aside className={`${isSidebarOpen ? 'translate-x-0 w-72' : '-translate-x-full md:translate-x-0 md:w-64'} fixed md:static inset-y-0 left-0 transition-transform duration-300 border-r flex flex-col z-30 overflow-hidden print:hidden ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
         <div className={`p-4 border-b flex items-center justify-between ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
           <div className="flex items-center gap-2 font-semibold">
@@ -675,7 +684,7 @@ export default function App() {
                               placeholder="Мәтінді осы жерде тікелей өңдеңіз..."
                               className={`w-full p-3 border rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-teal-500/20 leading-relaxed resize-y ${isDark ? 'bg-slate-950 border-slate-800 text-slate-200' : 'bg-slate-50 border-slate-300 text-slate-800'}`}
                             />
-                            <div className="text-[10px] text-slate-500 mt-1 text-right print:hidden">🔒 Өзгерту үшін жүйеге кіру қажет (Автоматты түрде бұлтта сақталады)</div>
+                            <div className="text-[10px] text-slate-500 mt-1 text-right print:hidden">🔒 Мәтінді өзгерту үшін жүйеге кіру қажет</div>
                           </div>
                         )}
                       </div>
