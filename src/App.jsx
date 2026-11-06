@@ -18,7 +18,7 @@ export default function App() {
   const [selectedDiseaseId, setSelectedDiseaseId] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTagFilter, setSelectedTagFilter] = useState(null);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false); // Телефонда автоматты жабық тұру үшін false
   const [saveStatus, setSaveStatus] = useState('synced');
   const [openSections, setOpenSections] = useState({});
 
@@ -28,7 +28,7 @@ export default function App() {
     setTheme(prev => prev === 'dark' ? 'light' : 'dark');
   };
 
-  // Supabase Auth күйі
+  // Supabase Auth күйі (Қауіпсіздік үшін)
   const [session, setSession] = useState(null);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [email, setEmail] = useState('');
@@ -56,7 +56,6 @@ export default function App() {
     setTimeout(() => setToastMessage(null), 3000);
   };
 
-  // --- SESSION ЖӘНЕ ДЕРЕКТЕРДІ ЖҮКТЕУ ---
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
@@ -97,7 +96,6 @@ export default function App() {
     }
   };
 
-  // --- SUPABASE STORAGE-КЕ ФОТО ЖҮКТЕУ ---
   const handleImageUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -105,7 +103,7 @@ export default function App() {
     setUploadingImage(true);
     try {
       const fileExt = file.name.split('.').pop();
-      const fileName = `${Date.now()}.${fileExt}`;
+      const fileName = `${Math.random()}.${fileExt}`;
       const filePath = `${fileName}`;
 
       const { error: uploadError } = await supabase.storage
@@ -124,7 +122,6 @@ export default function App() {
     }
   };
 
-  // --- АВТОРИЗАЦИЯ ФУНКЦИЯЛАРЫ ---
   const handleLogin = async (e) => {
     e.preventDefault();
     setAuthError(null);
@@ -157,7 +154,6 @@ export default function App() {
     }
   };
 
-  // --- CRUD ЖӘНЕ БАЗА МЕНЕН ЖҰМЫС ---
   const handleAddDisease = async (e) => {
     e.preventDefault();
     if (!newDiseaseTitle.trim()) return;
@@ -168,7 +164,7 @@ export default function App() {
         .insert([{ 
           title: newDiseaseTitle.trim(), 
           category: newDiseaseCategory.trim() || 'Жалпы',
-          image_url: newDiseaseImage || null 
+          image_url: newDiseaseImage || null
         }])
         .select()
         .single();
@@ -243,13 +239,17 @@ export default function App() {
   };
 
   const handleUpdateSubSectionContent = (subId, newContent) => {
-    setNotes(prev => prev.map(n => ({
-      ...n,
-      sections: n.sections.map(s => s.id === subId ? { ...s, content: newContent } : s)
-    })));
+    // Мәтінді өзгертпес бұрын авторлануды (парольді) тексеру
+    requireAuth(() => {
+      setNotes(prev => prev.map(n => ({
+        ...n,
+        sections: n.sections.map(s => s.id === subId ? { ...s, content: newContent } : s)
+      })));
+    });
   };
 
   const saveContentToCloud = async (subId, content) => {
+    if (!session) return; // Егер сессия болмаса сақтамайды
     setSaveStatus('saving');
     try {
       const { error } = await supabase
@@ -287,9 +287,8 @@ export default function App() {
   const isDark = theme === 'dark';
 
   return (
-    <div className={`flex h-screen font-sans text-sm overflow-hidden transition-colors duration-200 ${isDark ? 'bg-slate-950 text-slate-100' : 'bg-white text-slate-900'}`}>
+    <div className={`flex flex-col md:flex-row h-screen font-sans text-sm overflow-hidden transition-colors duration-200 ${isDark ? 'bg-slate-950 text-slate-100' : 'bg-white text-slate-900'}`}>
       
-      {/* Тоаст хабарлама */}
       {toastMessage && (
         <div className={`fixed bottom-5 right-5 z-50 border px-4 py-2.5 rounded-xl shadow-2xl text-xs font-medium flex items-center gap-2 animate-bounce print:hidden ${isDark ? 'bg-slate-900 border-teal-500/30 text-teal-300' : 'bg-slate-100 border-teal-500 text-teal-700'}`}>
           <ShieldCheck size={16} className="text-teal-400" />
@@ -297,14 +296,14 @@ export default function App() {
         </div>
       )}
 
-      {/* Supabase Auth Модальді терезесі */}
+      {/* Auth Modal */}
       {showAuthModal && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 print:hidden">
           <div className={`border rounded-2xl p-6 max-w-sm w-full shadow-2xl ${isDark ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-900'}`}>
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2 font-semibold">
                 <Lock size={18} className="text-teal-400" />
-                <span>Жүйеге кіру (Админ)</span>
+                <span>Өзгерту үшін жүйеге кіру (Админ)</span>
               </div>
               <button onClick={() => setShowAuthModal(false)} className="text-slate-400 hover:text-slate-200">
                 <X size={18} />
@@ -355,7 +354,7 @@ export default function App() {
         </div>
       )}
 
-      {/* Жаңа ауру қосу модальі */}
+      {/* Add Disease Modal */}
       {showAddDiseaseModal && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 print:hidden">
           <div className={`border rounded-2xl p-6 max-w-md w-full shadow-2xl ${isDark ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-900'}`}>
@@ -388,7 +387,7 @@ export default function App() {
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1">Сурет жүктеу (Міндетті емес)</label>
+                <label className="block text-xs font-medium text-slate-400 mb-1">Сурет жүктеу</label>
                 <div className="flex items-center gap-3">
                   <label className="flex-1 flex items-center justify-center gap-2 px-3 py-2 border border-dashed rounded-xl cursor-pointer hover:border-teal-500 text-xs text-slate-400 transition-colors">
                     <ImageIcon size={16} className="text-teal-400" />
@@ -407,7 +406,7 @@ export default function App() {
         </div>
       )}
 
-      {/* Жаңа бөлім қосу модальі */}
+      {/* Add SubSection Modal */}
       {showAddSubSectionModal && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 print:hidden">
           <div className={`border rounded-2xl p-6 max-w-md w-full shadow-2xl ${isDark ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-900'}`}>
@@ -460,19 +459,18 @@ export default function App() {
         </div>
       )}
 
-      {/* Бүйірлік мәзір (Sidebar) */}
-      <aside className={`${isSidebarOpen ? 'w-64' : 'w-0'} transition-all duration-300 border-r flex flex-col z-20 overflow-hidden print:hidden ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
+      {/* Sidebar - Телефонда толық адаптивті болуы үшін */}
+      <aside className={`${isSidebarOpen ? 'translate-x-0 w-72' : '-translate-x-full md:translate-x-0 md:w-64'} fixed md:static inset-y-0 left-0 transition-transform duration-300 border-r flex flex-col z-30 overflow-hidden print:hidden ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
         <div className={`p-4 border-b flex items-center justify-between ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
           <div className="flex items-center gap-2 font-semibold">
             <div className="w-6 h-6 rounded-lg bg-teal-500 flex items-center justify-center text-slate-950 text-xs font-bold">M</div>
             <span>MedStudy Pro</span>
           </div>
-          <button onClick={() => setIsSidebarOpen(false)} className="text-slate-400 hover:text-slate-200">
+          <button onClick={() => setIsSidebarOpen(false)} className="md:hidden text-slate-400 hover:text-slate-200">
             <X size={18} />
           </button>
         </div>
 
-        {/* Категориялар */}
         <div className="flex-1 overflow-y-auto p-2 space-y-1">
           <div className="text-xs font-medium text-slate-500 px-2 py-1">Категориялар</div>
           <button
@@ -494,7 +492,6 @@ export default function App() {
           ))}
         </div>
 
-        {/* Бұлттық синхрондау және Auth күйі */}
         <div className={`p-3 border-t space-y-2 text-xs ${isDark ? 'border-slate-800 bg-slate-900/50' : 'border-slate-200 bg-slate-100'}`}>
           <div className="flex items-center justify-between text-slate-400">
             <span className="flex items-center gap-1.5">
@@ -522,15 +519,13 @@ export default function App() {
         </div>
       </aside>
 
-      {/* Негізгі бет */}
+      {/* Main Content */}
       <main className="flex-1 flex flex-col min-w-0">
-        <header className={`h-14 border-b flex items-center justify-between px-4 gap-4 print:hidden ${isDark ? 'border-slate-800 bg-slate-900/50' : 'border-slate-200 bg-slate-50'}`}>
-          <div className="flex items-center gap-3 flex-1">
-            {!isSidebarOpen && (
-              <button onClick={() => setIsSidebarOpen(true)} className="p-1.5 hover:opacity-80 rounded-xl text-slate-400">
-                <Menu size={18} />
-              </button>
-            )}
+        <header className={`h-14 border-b flex items-center justify-between px-4 gap-2 print:hidden ${isDark ? 'border-slate-800 bg-slate-900/50' : 'border-slate-200 bg-slate-50'}`}>
+          <div className="flex items-center gap-2 flex-1">
+            <button onClick={() => setIsSidebarOpen(true)} className="p-1.5 md:hidden hover:opacity-80 rounded-xl text-slate-400">
+              <Menu size={18} />
+            </button>
             <div className="relative flex-1 max-w-md">
               <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
               <input
@@ -546,39 +541,31 @@ export default function App() {
           <div className="flex items-center gap-2">
             <button
               onClick={toggleTheme}
-              className={`px-3 py-1.5 border rounded-xl text-xs font-medium flex items-center gap-1.5 transition-colors ${isDark ? 'border-slate-800 bg-slate-900 text-amber-400 hover:bg-slate-800' : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-100'}`}
+              className={`p-2 md:px-3 md:py-1.5 border rounded-xl text-xs font-medium flex items-center gap-1.5 transition-colors ${isDark ? 'border-slate-800 bg-slate-900 text-amber-400 hover:bg-slate-800' : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-100'}`}
               title="Түсті ауыстыру"
             >
               {isDark ? <Sun size={14} /> : <Moon size={14} />}
-              <span>{isDark ? 'Жарық режим' : 'Түнгі режим'}</span>
+              <span className="hidden md:inline">{isDark ? 'Жарық режим' : 'Түнгі режим'}</span>
             </button>
 
-            <div className="flex items-center gap-1.5">
-              <button
-                onClick={() => setSelectedTagFilter(null)}
-                className={`px-3 py-1 rounded-xl text-xs font-medium transition-all ${!selectedTagFilter ? 'bg-teal-600 text-white' : (isDark ? 'bg-slate-900 border border-slate-800 text-slate-400 hover:bg-slate-800' : 'bg-white border border-slate-300 text-slate-600 hover:bg-slate-100')}`}
-              >
-                Барлығы
-              </button>
-              <button
-                onClick={() => setSelectedTagFilter('Шұғыл')}
-                className={`px-3 py-1 rounded-xl text-xs font-medium transition-all ${selectedTagFilter === 'Шұғыл' ? 'bg-rose-600 text-white' : 'bg-rose-500/10 border border-rose-500/20 text-rose-400 hover:bg-rose-500/20'}`}
-              >
-                Шұғыл
-              </button>
-            </div>
             <button
-              onClick={() => window.print()}
-              className={`px-3 py-1.5 border rounded-xl text-xs font-medium flex items-center gap-1.5 transition-colors ${isDark ? 'border-slate-800 bg-slate-900 text-teal-400 hover:bg-slate-800' : 'border-slate-300 bg-white text-teal-700 hover:bg-slate-100'}`}
+              onClick={() => setSelectedTagFilter(null)}
+              className={`px-2.5 py-1 rounded-xl text-xs font-medium transition-all ${!selectedTagFilter ? 'bg-teal-600 text-white' : (isDark ? 'bg-slate-900 border border-slate-800 text-slate-400 hover:bg-slate-800' : 'bg-white border border-slate-300 text-slate-600 hover:bg-slate-100')}`}
             >
-              <Printer size={14} /> Печать
+              Барлығы
+            </button>
+            <button
+              onClick={() => setSelectedTagFilter('Шұғыл')}
+              className={`px-2.5 py-1 rounded-xl text-xs font-medium transition-all ${selectedTagFilter === 'Шұғыл' ? 'bg-rose-600 text-white' : 'bg-rose-500/10 border border-rose-500/20 text-rose-400 hover:bg-rose-500/20'}`}
+            >
+              Шұғыл
             </button>
           </div>
         </header>
 
-        {/* Жұмыс аймағы */}
+        {/* Workspace */}
         <div className="flex-1 flex overflow-hidden">
-          <div className={`w-72 border-r flex flex-col print:hidden ${isDark ? 'border-slate-800 bg-slate-900/30' : 'border-slate-200 bg-slate-50/50'}`}>
+          <div className={`w-72 border-r hidden md:flex flex-col print:hidden ${isDark ? 'border-slate-800 bg-slate-900/30' : 'border-slate-200 bg-slate-50/50'}`}>
             <div className={`p-3 border-b flex items-center justify-between ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
               <span className="font-medium text-xs text-slate-500 uppercase tracking-wider">Нозологиялар ({filteredDiseases.length})</span>
               <button 
@@ -622,10 +609,10 @@ export default function App() {
             </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-6 max-w-4xl mx-auto w-full">
+          <div className="flex-1 overflow-y-auto p-4 md:p-6 max-w-4xl mx-auto w-full">
             {currentDisease ? (
               <div className="space-y-6">
-                <div className={`flex items-start justify-between border-b pb-4 ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
+                <div className={`flex flex-col md:flex-row md:items-center justify-between border-b pb-4 gap-3 ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
                   <div className="space-y-2">
                     <div className="inline-block px-2.5 py-0.5 bg-teal-500/10 border border-teal-500/20 text-teal-400 rounded-lg text-xs font-medium">
                       {currentDisease.category}
@@ -640,7 +627,7 @@ export default function App() {
                   </div>
                   <button
                     onClick={() => requireAuth(() => setShowAddSubSectionModal(true))}
-                    className="px-3 py-1.5 bg-teal-600 text-white rounded-xl text-xs font-medium hover:bg-teal-500 flex items-center gap-1.5 shadow-sm transition-colors print:hidden"
+                    className="px-3 py-1.5 bg-teal-600 text-white rounded-xl text-xs font-medium hover:bg-teal-500 flex items-center justify-center gap-1.5 shadow-sm transition-colors print:hidden"
                   >
                     <Plus size={14} /> Бөлім қосу
                   </button>
@@ -686,9 +673,9 @@ export default function App() {
                               onChange={(e) => handleUpdateSubSectionContent(section.id, e.target.value)}
                               onBlur={(e) => saveContentToCloud(section.id, e.target.value)}
                               placeholder="Мәтінді осы жерде тікелей өңдеңіз..."
-                              className={`w-full p-3 border rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-teal-500/20 leading-relaxed resize-y ${isDark ? 'bg-slate-950 border-slate-800 text-slate-200' : 'bg-slate-50 border-slate-300 text-slate-900'}`}
+                              className={`w-full p-3 border rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-teal-500/20 leading-relaxed resize-y ${isDark ? 'bg-slate-950 border-slate-800 text-slate-200' : 'bg-slate-50 border-slate-300 text-slate-800'}`}
                             />
-                            <div className="text-[10px] text-slate-500 mt-1 text-right print:hidden">💡 Өзгеріс өрістен шыққанда (blur) автоматты сақталады</div>
+                            <div className="text-[10px] text-slate-500 mt-1 text-right print:hidden">🔒 Өзгерту үшін жүйеге кіру қажет (Автоматты түрде бұлтта сақталады)</div>
                           </div>
                         )}
                       </div>
@@ -697,7 +684,7 @@ export default function App() {
                 </div>
               </div>
             ) : (
-              <div className="h-full flex items-center justify-center text-slate-500">
+              <div className="h-full flex items-center justify-center text-slate-500 p-6 text-center">
                 Сол жақ тізімнен ауруды таңдаңыз немесе жаңадан қосыңыз
               </div>
             )}
