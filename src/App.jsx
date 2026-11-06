@@ -1,505 +1,709 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { createClient } from '@supabase/supabase-js';
 import { 
-  Folder, FolderOpen, ChevronRight, ChevronDown, Plus, 
-  Trash2, Edit3, Save, X, Lock, Unlock, Download, Upload, 
-  Search, BookOpen, Image as ImageIcon, ExternalLink, FileText
+  Folder, ChevronRight, ChevronDown, Plus, Search, 
+  Save, CheckCircle, Menu, X, Tag, Trash2, Lock, Unlock, ShieldCheck, Cloud, RefreshCw, Printer, LogOut, Sun, Moon, Image as ImageIcon
 } from 'lucide-react';
 
-const INITIAL_LIBRARY = [
-  {
-    id: 'cat-1',
-    title: 'Хирургия',
-    tag: 'Негізгі',
-    children: [
-      {
-        id: 'sec-1',
-        title: 'Жедел аппендицит',
-        content: 'Жедел аппендицит — соқыр ішек өсіндісінің қабынуы.\n\n• Клиникасы: Оң мықын аймағының ауыруы (Кохер симптомы), жүрек айну, құсу, субфебрильді температура.\n• Диагностика: УДЗ, ЖҚА (лейкоцитоз).\n• Симптомдар: МакБерни, Ровзинг, Ситковский.',
-        imageUrl: '',
-        tag: 'Аурулар',
-        children: [
-          {
-            id: 'sec-1-1',
-            title: 'Операциялық ем (Аппендэктомия)',
-            content: 'Лапароскопиялық немесе дәстүрлі ашық аппендэктомия жасау алгоритмі.',
-            imageUrl: '',
-            tag: 'Хирургиялық ем',
-            children: []
-          }
-        ]
-      }
-    ]
-  },
-  {
-    id: 'cat-2',
-    title: 'Кардиология',
-    tag: 'Терапия',
-    children: [
-      {
-        id: 'sec-2',
-        title: 'Гипертониялық криз',
-        content: 'АҚҚ күрт жоғарылауымен (систолалық >180, диастолалық >120 мм сын.бағ.) жүретін шұғыл жағдай.',
-        imageUrl: '',
-        tag: 'Шұғыл көмек',
-        children: []
-      }
-    ]
-  }
-];
+// --- SUPABASE БАПТАУЛАРЫ ---
+const SUPABASE_URL = 'https://pvneicwdqskvqakpuddn.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_2SFWi_uduEGiFTKEEHiPiA_oIDFbJEd';
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 export default function App() {
-  const [library, setLibrary] = useState(() => {
-    const saved = localStorage.getItem('medstudy_library_v4');
-    return saved ? JSON.parse(saved) : INITIAL_LIBRARY;
-  });
+  const [notes, setNotes] = useState([]);
+  const [loading, setLoading] = useState(true);
+  
+  const [selectedCategory, setSelectedCategory] = useState(null);
+  const [selectedDiseaseId, setSelectedDiseaseId] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedTagFilter, setSelectedTagFilter] = useState(null);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [saveStatus, setSaveStatus] = useState('synced');
+  const [openSections, setOpenSections] = useState({});
 
-  const [searchTerm, setSearchTerm] = useState('');
-  const [expanded, setExpanded] = useState({});
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [showPinModal, setShowPinModal] = useState(false);
-  const [pinInput, setPinInput] = useState('');
-  const [pinError, setPinError] = useState(false);
+  // --- ТЕМА (DARK / LIGHT REJIM) ---
+  const [theme, setTheme] = useState('dark');
+  const toggleTheme = () => {
+    setTheme(prev => prev === 'dark' ? 'light' : 'dark');
+  };
 
-  const [editingSection, setEditingSection] = useState(null);
-  const [editTitle, setEditTitle] = useState('');
-  const [editContent, setEditContent] = useState('');
-  const [editImageUrl, setEditImageUrl] = useState('');
-  const [editTag, setEditTag] = useState('');
+  // Supabase Auth күйі
+  const [session, setSession] = useState(null);
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [authError, setAuthError] = useState(null);
+  const [pendingAction, setPendingAction] = useState(null);
 
-  const [previewImg, setPreviewImg] = useState(null);
+  // Модальді терезелер
+  const [showAddDiseaseModal, setShowAddDiseaseModal] = useState(false);
+  const [newDiseaseTitle, setNewDiseaseTitle] = useState('');
+  const [newDiseaseCategory, setNewDiseaseCategory] = useState('Хирургия');
+  const [newDiseaseImage, setNewDiseaseImage] = useState('');
+  const [uploadingImage, setUploadingImage] = useState(false);
 
+  const [showAddSubSectionModal, setShowAddSubSectionModal] = useState(false);
+  const [newSubTitle, setNewSubTitle] = useState('');
+  const [newSubContent, setNewSubContent] = useState('');
+  const [newSubTag, setNewSubTag] = useState('Ақпарат');
+
+  // Тоаст хабарлама
+  const [toastMessage, setToastMessage] = useState(null);
+
+  const showToast = (msg) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 3000);
+  };
+
+  // --- SESSION ЖӘНЕ ДЕРЕКТЕРДІ ЖҮКТЕУ ---
   useEffect(() => {
-    localStorage.setItem('medstudy_library_v4', JSON.stringify(library));
-  }, [library]);
-
-  const toggleExpand = (id) => {
-    setExpanded(prev => ({ ...prev, [id]: !prev[id] }));
-  };
-
-  const handleLogin = (e) => {
-    e.preventDefault();
-    if (pinInput === '202306') {
-      setIsAdmin(true);
-      setShowPinModal(false);
-      setPinInput('');
-      setPinError(false);
-    } else {
-      setPinError(true);
-    }
-  };
-
-  const updateTree = (list, updated) => {
-    return list.map(item => {
-      if (item.id === updated.id) return updated;
-      if (item.children && item.children.length > 0) {
-        return { ...item, children: updateTree(item.children, updated) };
-      }
-      return item;
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
     });
-  };
 
-  const addChildToTree = (list, parentId, newChild) => {
-    return list.map(item => {
-      if (item.id === parentId) {
-        return { ...item, children: [...(item.children || []), newChild] };
-      }
-      if (item.children && item.children.length > 0) {
-        return { ...item, children: addChildToTree(item.children, parentId, newChild) };
-      }
-      return item;
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
     });
-  };
 
-  const deleteFromTree = (list, id) => {
-    return list
-      .filter(item => item.id !== id)
-      .map(item => {
-        if (item.children && item.children.length > 0) {
-          return { ...item, children: deleteFromTree(item.children, id) };
+    fetchNotesFromCloud();
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const fetchNotesFromCloud = async () => {
+    setLoading(true);
+    try {
+      const { data: diseasesData, error: diseaseError } = await supabase
+        .from('diseases')
+        .select(`*, sections (*)`);
+
+      if (diseaseError) throw diseaseError;
+
+      if (diseasesData && diseasesData.length > 0) {
+        setNotes(diseasesData);
+        if (!selectedDiseaseId) {
+          setSelectedDiseaseId(diseasesData[0].id);
+          setSelectedCategory(diseasesData[0].category);
         }
-        return item;
-      });
-  };
-
-  const handleSaveEdit = () => {
-    if (!editingSection) return;
-    const updated = {
-      ...editingSection,
-      title: editTitle,
-      content: editContent,
-      imageUrl: editImageUrl,
-      tag: editTag
-    };
-    setLibrary(prev => updateTree(prev, updated));
-    setEditingSection(null);
-  };
-
-  const handleAddCategory = () => {
-    const newCat = {
-      id: 'cat-' + Date.now(),
-      title: 'Жаңа Категория',
-      tag: 'Бөлім',
-      children: []
-    };
-    setLibrary([newCat, ...library]);
-    startEditing(newCat);
-  };
-
-  const handleAddChild = (parentId) => {
-    const newChild = {
-      id: 'sec-' + Date.now(),
-      title: 'Жаңа конспект / бөлімше',
-      content: 'Мәтінді осында жазыңыз...',
-      imageUrl: '',
-      tag: 'Анықтама',
-      children: []
-    };
-    setLibrary(prev => addChildToTree(prev, parentId, newChild));
-    setExpanded(prev => ({ ...prev, [parentId]: true }));
-    startEditing(newChild);
-  };
-
-  const handleDelete = (id) => {
-    if (confirm('Осы бөлімді өшіруге сенімдісіз бе?')) {
-      setLibrary(prev => deleteFromTree(prev, id));
-      if (editingSection && editingSection.id === id) setEditingSection(null);
+      } else {
+        setNotes([]);
+      }
+    } catch (err) {
+      console.error('Деректерді жүктеу қатесі:', err.message);
+      showToast('❌ Деректерді жүктеу сәтсіз аяқталды');
+    } finally {
+      setLoading(false);
     }
   };
 
-  const startEditing = (sec) => {
-    setEditingSection(sec);
-    setEditTitle(sec.title);
-    setEditContent(sec.content || '');
-    setEditImageUrl(sec.imageUrl || '');
-    setEditTag(sec.tag || '');
-  };
-
-  const handleImageUpload = (e) => {
+  // --- SUPABASE STORAGE-КЕ ФОТО ЖҮКТЕУ ---
+  const handleImageUpload = async (e) => {
     const file = e.target.files[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => setEditImageUrl(reader.result);
-      reader.readAsDataURL(file);
+    if (!file) return;
+
+    setUploadingImage(true);
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Date.now()}.${fileExt}`;
+      const filePath = `${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('images')
+        .upload(filePath, file);
+
+      if (uploadError) throw uploadError;
+
+      const { data } = supabase.storage.from('images').getPublicUrl(filePath);
+      setNewDiseaseImage(data.publicUrl);
+      showToast('🖼️ Сурет сәтті жүктелді');
+    } catch (err) {
+      showToast('❌ Сурет жүктеу қатесі: ' + err.message);
+    } finally {
+      setUploadingImage(false);
     }
   };
 
-  const exportJSON = () => {
-    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(library, null, 2));
-    const a = document.createElement('a');
-    a.href = dataStr;
-    a.download = `medstudy_backup_${new Date().toISOString().slice(0,10)}.json`;
-    a.click();
-    a.remove();
+  // --- АВТОРИЗАЦИЯ ФУНКЦИЯЛАРЫ ---
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setAuthError(null);
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) {
+      setAuthError(error.message);
+    } else {
+      setShowAuthModal(false);
+      setEmail('');
+      setPassword('');
+      showToast('🔓 Жүйеге сәтті кірдіңіз');
+      if (pendingAction) {
+        pendingAction();
+        setPendingAction(null);
+      }
+    }
   };
 
-  const importJSON = (e) => {
-    const reader = new FileReader();
-    if (e.target.files[0]) {
-      reader.readAsText(e.target.files[0], "UTF-8");
-      reader.onload = (event) => {
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    showToast('🔒 Жүйеден шықтыңыз');
+  };
+
+  const requireAuth = (action) => {
+    if (session) {
+      action();
+    } else {
+      setPendingAction(() => action);
+      setShowAuthModal(true);
+    }
+  };
+
+  // --- CRUD ЖӘНЕ БАЗА МЕНЕН ЖҰМЫС ---
+  const handleAddDisease = async (e) => {
+    e.preventDefault();
+    if (!newDiseaseTitle.trim()) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('diseases')
+        .insert([{ 
+          title: newDiseaseTitle.trim(), 
+          category: newDiseaseCategory.trim() || 'Жалпы',
+          image_url: newDiseaseImage || null 
+        }])
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      const { error: secError } = await supabase
+        .from('sections')
+        .insert([{ disease_id: data.id, title: 'Анықтамасы', tag: 'Ақпарат', content: 'Мұнда аурудың анықтамасын жазыңыз...' }]);
+
+      if (secError) throw secError;
+
+      await fetchNotesFromCloud();
+      setShowAddDiseaseModal(false);
+      setNewDiseaseTitle('');
+      setNewDiseaseImage('');
+      showToast('✨ Жаңа ауру сәтті қосылды');
+    } catch (err) {
+      showToast('❌ Қате кетті: ' + err.message);
+    }
+  };
+
+  const handleDeleteDisease = async (id) => {
+    requireAuth(async () => {
+      if (window.confirm('Бұл конспектіні жоюға сенімдісіз бе?')) {
         try {
-          const parsed = JSON.parse(event.target.result);
-          setLibrary(parsed);
-          alert('Деректер сәтті жүктелді!');
+          const { error } = await supabase.from('diseases').delete().eq('id', id);
+          if (error) throw error;
+          
+          await fetchNotesFromCloud();
+          showToast('🗑️ Ауру жойылды');
         } catch (err) {
-          alert('Қате JSON файлы!');
+          showToast('❌ Жою кезінде қате шықты');
         }
-      };
-    }
-  };
-
-  const renderTree = (items, level = 0) => {
-    return items.map((item) => {
-      const isExpanded = expanded[item.id];
-      const hasChildren = item.children && item.children.length > 0;
-      const isRoot = level === 0;
-
-      return (
-        <div key={item.id} className={`transition-all ${isRoot ? 'mb-3' : 'ml-4 md:ml-6 my-2 border-l border-slate-200 pl-3'}`}>
-          <div className={`group flex items-center justify-between p-3.5 rounded-xl border transition duration-200 ${
-            isRoot 
-              ? 'bg-white border-slate-200 shadow-sm hover:border-slate-300' 
-              : 'bg-slate-50/80 border-slate-200/60 hover:bg-white'
-          }`}>
-            <div className="flex items-center gap-3 cursor-pointer flex-1" onClick={() => toggleExpand(item.id)}>
-              <button className="text-slate-400 hover:text-slate-600">
-                {hasChildren ? (
-                  isExpanded ? <ChevronDown className="w-4 h-4 text-slate-700" /> : <ChevronRight className="w-4 h-4 text-slate-500" />
-                ) : (
-                  <FileText className="w-4 h-4 text-slate-400" />
-                )}
-              </button>
-
-              {isRoot ? (
-                isExpanded ? <FolderOpen className="w-5 h-5 text-blue-600" /> : <Folder className="w-5 h-5 text-blue-600" />
-              ) : null}
-
-              <span className={`font-semibold tracking-tight ${isRoot ? 'text-slate-900 text-base' : 'text-slate-800 text-sm'}`}>
-                {item.title}
-              </span>
-
-              {item.tag && (
-                <span className="text-[11px] font-medium px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 border border-slate-200">
-                  {item.tag}
-                </span>
-              )}
-            </div>
-
-            {isAdmin && (
-              <div className="flex items-center gap-1 opacity-90 sm:opacity-0 group-hover:opacity-100 transition">
-                <button 
-                  onClick={() => handleAddChild(item.id)}
-                  className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-slate-100 rounded-lg transition"
-                  title="Бөлімше қосу"
-                >
-                  <Plus className="w-4 h-4" />
-                </button>
-                <button 
-                  onClick={() => startEditing(item)}
-                  className="p-1.5 text-slate-500 hover:text-amber-600 hover:bg-slate-100 rounded-lg transition"
-                  title="Өңдеу"
-                >
-                  <Edit3 className="w-4 h-4" />
-                </button>
-                <button 
-                  onClick={() => handleDelete(item.id)}
-                  className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-slate-100 rounded-lg transition"
-                  title="Жою"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </div>
-            )}
-          </div>
-
-          {isExpanded && (
-            <div className="mt-1">
-              {item.content && (
-                <div className="ml-7 my-2 p-4 bg-white border border-slate-200/80 rounded-xl text-slate-700 text-sm leading-relaxed whitespace-pre-line shadow-xs">
-                  {item.content}
-                  {item.imageUrl && (
-                    <div className="mt-3">
-                      <div 
-                        onClick={() => setPreviewImg(item.imageUrl)}
-                        className="relative group w-44 h-28 rounded-lg overflow-hidden border border-slate-200 cursor-pointer bg-slate-100"
-                      >
-                        <img src={item.imageUrl} alt="Attachment" className="w-full h-full object-cover group-hover:scale-105 transition" />
-                        <div className="absolute inset-0 bg-slate-900/30 opacity-0 group-hover:opacity-100 transition flex items-center justify-center text-white text-xs gap-1 font-medium">
-                          <ExternalLink className="w-3.5 h-3.5" /> Қарау
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {hasChildren && renderTree(item.children, level + 1)}
-            </div>
-          )}
-        </div>
-      );
+      }
     });
   };
 
-  const filterTree = (list, query) => {
-    return list.reduce((acc, item) => {
-      const matchTitle = item.title.toLowerCase().includes(query.toLowerCase());
-      const matchContent = (item.content || '').toLowerCase().includes(query.toLowerCase());
-      const filteredChildren = item.children ? filterTree(item.children, query) : [];
+  const handleAddSubSection = async (e) => {
+    e.preventDefault();
+    if (!currentDisease || !newSubTitle.trim()) return;
 
-      if (matchTitle || matchContent || filteredChildren.length > 0) {
-        acc.push({ ...item, children: filteredChildren });
-      }
-      return acc;
-    }, []);
+    try {
+      const { error } = await supabase
+        .from('sections')
+        .insert([{ disease_id: currentDisease.id, title: newSubTitle.trim(), content: newSubContent.trim(), tag: newSubTag }]);
+
+      if (error) throw error;
+
+      await fetchNotesFromCloud();
+      setNewSubTitle('');
+      setNewSubContent('');
+      setShowAddSubSectionModal(false);
+      showToast('📂 Жаңа бөлім қосылды');
+    } catch (err) {
+      showToast('❌ Бөлім қосу сәтсіз аяқталды');
+    }
   };
 
-  const displayedLibrary = searchTerm ? filterTree(library, searchTerm) : library;
+  const handleDeleteSubSection = async (subId) => {
+    requireAuth(async () => {
+      try {
+        const { error } = await supabase.from('sections').delete().eq('id', subId);
+        if (error) throw error;
+
+        await fetchNotesFromCloud();
+        showToast('🗑️ Бөлім жойылды');
+      } catch (err) {
+        showToast('❌ Бөлімді жою қатесі');
+      }
+    });
+  };
+
+  const handleUpdateSubSectionContent = (subId, newContent) => {
+    setNotes(prev => prev.map(n => ({
+      ...n,
+      sections: n.sections.map(s => s.id === subId ? { ...s, content: newContent } : s)
+    })));
+  };
+
+  const saveContentToCloud = async (subId, content) => {
+    setSaveStatus('saving');
+    try {
+      const { error } = await supabase
+        .from('sections')
+        .update({ content })
+        .eq('id', subId);
+
+      if (error) throw error;
+      setSaveStatus('synced');
+    } catch (err) {
+      setSaveStatus('saved');
+    }
+  };
+
+  const categories = useMemo(() => {
+    const set = new Set(notes.map(n => n.category));
+    return Array.from(set);
+  }, [notes]);
+
+  const filteredDiseases = useMemo(() => {
+    return notes.filter(note => {
+      const matchesCategory = !selectedCategory || note.category === selectedCategory;
+      const matchesSearch = note.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        note.sections.some(s => s.content.toLowerCase().includes(searchQuery.toLowerCase()) || s.title.toLowerCase().includes(searchQuery.toLowerCase()));
+      const matchesTag = !selectedTagFilter || note.sections.some(s => s.tag === selectedTagFilter);
+      return matchesCategory && matchesSearch && matchesTag;
+    });
+  }, [notes, selectedCategory, searchQuery, selectedTagFilter]);
+
+  const currentDisease = notes.find(n => n.id === selectedDiseaseId);
+  const toggleSection = (id) => {
+    setOpenSections(prev => ({ ...prev, [id]: prev[id] === undefined ? false : !prev[id] }));
+  };
+
+  const isDark = theme === 'dark';
 
   return (
-    <div className="min-h-screen bg-[#fafafa] text-slate-900 flex flex-col font-sans antialiased">
-      {/* Navbar */}
-      <header className="bg-white/80 backdrop-blur-md border-b border-slate-200 sticky top-0 z-30 px-4 md:px-8 py-3.5">
-        <div className="max-w-5xl mx-auto flex items-center justify-between gap-4">
-          <div className="flex items-center gap-2.5">
-            <div className="bg-slate-900 text-white p-2 rounded-xl shadow-xs">
-              <BookOpen className="w-5 h-5" />
-            </div>
-            <span className="text-lg font-bold tracking-tight text-slate-900">MedStudy</span>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <div className="relative hidden sm:block">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-              <input 
-                type="text" 
-                placeholder="Іздеу..." 
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="bg-slate-100/80 border border-transparent focus:border-slate-300 focus:bg-white rounded-xl pl-9 pr-3 py-1.5 text-sm w-48 transition focus:outline-none"
-              />
-            </div>
-
-            <button 
-              onClick={exportJSON}
-              className="flex items-center gap-1.5 text-xs bg-white hover:bg-slate-50 text-slate-700 px-3 py-2 rounded-xl border border-slate-200 font-medium transition shadow-xs"
-              title="Сақтық көшірме жүктеу"
-            >
-              <Download className="w-3.5 h-3.5 text-slate-500" /> Экспорт
-            </button>
-
-            <label className="flex items-center gap-1.5 text-xs bg-white hover:bg-slate-50 text-slate-700 px-3 py-2 rounded-xl border border-slate-200 font-medium transition cursor-pointer shadow-xs">
-              <Upload className="w-3.5 h-3.5 text-slate-500" /> Импорт
-              <input type="file" accept=".json" onChange={importJSON} className="hidden" />
-            </label>
-
-            {isAdmin ? (
-              <>
-                <button 
-                  onClick={handleAddCategory}
-                  className="flex items-center gap-1 text-xs bg-slate-900 hover:bg-slate-800 text-white px-3 py-2 rounded-xl font-medium transition shadow-xs"
-                >
-                  <Plus className="w-3.5 h-3.5" /> Категория
-                </button>
-                <button 
-                  onClick={() => setIsAdmin(false)}
-                  className="p-2 text-rose-600 bg-rose-50 hover:bg-rose-100 rounded-xl transition border border-rose-200/60"
-                  title="Шығу"
-                >
-                  <Lock className="w-4 h-4" />
-                </button>
-              </>
-            ) : (
-              <button 
-                onClick={() => setShowPinModal(true)}
-                className="p-2 text-slate-600 bg-slate-100 hover:bg-slate-200/80 rounded-xl transition"
-                title="Редакциялау"
-              >
-                <Unlock className="w-4 h-4" />
-              </button>
-            )}
-          </div>
+    <div className={`flex h-screen font-sans text-sm overflow-hidden transition-colors duration-200 ${isDark ? 'bg-slate-950 text-slate-100' : 'bg-white text-slate-900'}`}>
+      
+      {/* Тоаст хабарлама */}
+      {toastMessage && (
+        <div className={`fixed bottom-5 right-5 z-50 border px-4 py-2.5 rounded-xl shadow-2xl text-xs font-medium flex items-center gap-2 animate-bounce print:hidden ${isDark ? 'bg-slate-900 border-teal-500/30 text-teal-300' : 'bg-slate-100 border-teal-500 text-teal-700'}`}>
+          <ShieldCheck size={16} className="text-teal-400" />
+          <span>{toastMessage}</span>
         </div>
-      </header>
+      )}
 
-      {/* Main Content */}
-      <main className="max-w-5xl w-full mx-auto p-4 md:p-8 flex-1">
-        {displayedLibrary.length === 0 ? (
-          <div className="text-center py-16 bg-white rounded-2xl border border-slate-200 shadow-xs">
-            <p className="text-slate-400 text-sm">Конспектілер табылмады.</p>
-          </div>
-        ) : (
-          renderTree(displayedLibrary)
-        )}
-      </main>
-
-      {/* PIN Modal */}
-      {showPinModal && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white border border-slate-200 rounded-2xl p-6 max-w-xs w-full shadow-xl space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-bold text-slate-900">Админ пароль</h3>
-              <button onClick={() => setShowPinModal(false)} className="text-slate-400 hover:text-slate-600">
-                <X className="w-4 h-4" />
+      {/* Supabase Auth Модальді терезесі */}
+      {showAuthModal && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 print:hidden">
+          <div className={`border rounded-2xl p-6 max-w-sm w-full shadow-2xl ${isDark ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-900'}`}>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2 font-semibold">
+                <Lock size={18} className="text-teal-400" />
+                <span>Жүйеге кіру (Админ)</span>
+              </div>
+              <button onClick={() => setShowAuthModal(false)} className="text-slate-400 hover:text-slate-200">
+                <X size={18} />
               </button>
             </div>
             <form onSubmit={handleLogin} className="space-y-3">
-              <input 
-                type="password" 
-                placeholder="PIN" 
-                value={pinInput}
-                onChange={(e) => setPinInput(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-center text-lg tracking-widest focus:outline-none focus:border-slate-400"
-                autoFocus
-              />
-              {pinError && <p className="text-xs text-rose-500 text-center">Қате PIN код!</p>}
-              <button type="submit" className="w-full bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold py-2.5 rounded-xl transition">
-                Кіру
-              </button>
+              <div>
+                <label className="block text-xs font-medium text-slate-400 mb-1">Email</label>
+                <input
+                  type="email"
+                  placeholder="admin@medstudy.kz"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className={`w-full px-3 py-2 border rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-teal-500/20 ${isDark ? 'bg-slate-950 border-slate-800 text-slate-100' : 'bg-slate-50 border-slate-300 text-slate-900'}`}
+                  required
+                  autoFocus
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-400 mb-1">Пароль</label>
+                <input
+                  type="password"
+                  placeholder="••••••••"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className={`w-full px-3 py-2 border rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-teal-500/20 ${isDark ? 'bg-slate-950 border-slate-800 text-slate-100' : 'bg-slate-50 border-slate-300 text-slate-900'}`}
+                  required
+                />
+              </div>
+              {authError && <div className="text-xs text-rose-400 font-medium">{authError}</div>}
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowAuthModal(false)}
+                  className="px-4 py-2 rounded-xl text-xs font-medium text-slate-400 hover:bg-slate-800/20"
+                >
+                  Болдырмау
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-teal-600 text-white rounded-xl text-xs font-medium hover:bg-teal-500 shadow-sm"
+                >
+                  Кіру
+                </button>
+              </div>
             </form>
           </div>
         </div>
       )}
 
-      {/* Edit Modal */}
-      {editingSection && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white border border-slate-200 rounded-2xl p-6 max-w-lg w-full shadow-xl space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h3 className="text-sm font-bold text-slate-900">Бөлімді өңдеу</h3>
-              <button onClick={() => setEditingSection(null)} className="text-slate-400 hover:text-slate-600">
-                <X className="w-4 h-4" />
-              </button>
+      {/* Жаңа ауру қосу модальі */}
+      {showAddDiseaseModal && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 print:hidden">
+          <div className={`border rounded-2xl p-6 max-w-md w-full shadow-2xl ${isDark ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-900'}`}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-bold">Жаңа нозология (Ауру) қосу</h3>
+              <button onClick={() => setShowAddDiseaseModal(false)} className="text-slate-400 hover:text-slate-200"><X size={18} /></button>
             </div>
-
-            <div className="space-y-3">
+            <form onSubmit={handleAddDisease} className="space-y-4">
               <div>
-                <label className="text-xs text-slate-500 mb-1 block">Тақырыбы</label>
-                <input 
-                  type="text" 
-                  value={editTitle}
-                  onChange={(e) => setEditTitle(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-slate-400"
+                <label className="block text-xs font-medium text-slate-400 mb-1">Ауру атауы</label>
+                <input
+                  type="text"
+                  placeholder="Мысалы: Холецистит"
+                  value={newDiseaseTitle}
+                  onChange={(e) => setNewDiseaseTitle(e.target.value)}
+                  className={`w-full px-3 py-2 border rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-teal-500/20 ${isDark ? 'bg-slate-950 border-slate-800 text-slate-100' : 'bg-slate-50 border-slate-300 text-slate-900'}`}
+                  required
+                  autoFocus
                 />
               </div>
-
               <div>
-                <label className="text-xs text-slate-500 mb-1 block">Тег / Категория</label>
-                <input 
-                  type="text" 
-                  value={editTag}
-                  onChange={(e) => setEditTag(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-slate-400"
+                <label className="block text-xs font-medium text-slate-400 mb-1">Категория</label>
+                <input
+                  type="text"
+                  placeholder="Мысалы: Хирургия"
+                  value={newDiseaseCategory}
+                  onChange={(e) => setNewDiseaseCategory(e.target.value)}
+                  className={`w-full px-3 py-2 border rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-teal-500/20 ${isDark ? 'bg-slate-950 border-slate-800 text-slate-100' : 'bg-slate-50 border-slate-300 text-slate-900'}`}
+                  required
                 />
               </div>
-
               <div>
-                <label className="text-xs text-slate-500 mb-1 block">Мазмұны</label>
-                <textarea 
-                  rows="5"
-                  value={editContent}
-                  onChange={(e) => setEditContent(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-slate-400 resize-none"
-                />
-              </div>
-
-              <div>
-                <label className="text-xs text-slate-500 mb-1 block">Сурет (Файл жүктеу)</label>
+                <label className="block text-xs font-medium text-slate-400 mb-1">Сурет жүктеу (Міндетті емес)</label>
                 <div className="flex items-center gap-3">
-                  <label className="flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs px-3 py-2 rounded-xl cursor-pointer transition">
-                    <ImageIcon className="w-3.5 h-3.5 text-slate-500" /> Таңдау
+                  <label className="flex-1 flex items-center justify-center gap-2 px-3 py-2 border border-dashed rounded-xl cursor-pointer hover:border-teal-500 text-xs text-slate-400 transition-colors">
+                    <ImageIcon size={16} className="text-teal-400" />
+                    <span>{uploadingImage ? 'Жүктелуде...' : 'Файл таңдау'}</span>
                     <input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
                   </label>
-                  {editImageUrl && (
-                    <button onClick={() => setEditImageUrl('')} className="text-xs text-rose-500 hover:underline">
-                      Өшіру
-                    </button>
-                  )}
+                  {newDiseaseImage && <span className="text-xs text-teal-400 font-medium">✅ Жүктелді</span>}
                 </div>
               </div>
-            </div>
-
-            <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
-              <button onClick={() => setEditingSection(null)} className="px-3 py-2 text-xs text-slate-600 hover:bg-slate-100 rounded-xl transition">
-                Болдырмау
-              </button>
-              <button onClick={handleSaveEdit} className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-xl transition flex items-center gap-1.5">
-                <Save className="w-3.5 h-3.5" /> Сақтау
-              </button>
-            </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <button type="button" onClick={() => setShowAddDiseaseModal(false)} className="px-4 py-2 rounded-xl text-xs font-medium text-slate-400 hover:bg-slate-800/20">Болдырмау</button>
+                <button type="submit" className="px-4 py-2 bg-teal-600 text-white rounded-xl text-xs font-medium hover:bg-teal-500 shadow-sm">Қосу</button>
+              </div>
+            </form>
           </div>
         </div>
       )}
 
-      {/* Image Preview Modal */}
-      {previewImg && (
-        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
-          <button onClick={() => setPreviewImg(null)} className="absolute top-4 right-4 text-white bg-slate-800/80 p-2 rounded-full hover:bg-slate-700">
-            <X className="w-5 h-5" />
-          </button>
-          <img src={previewImg} alt="Preview" className="max-w-full max-h-[85vh] object-contain rounded-xl shadow-2xl" />
+      {/* Жаңа бөлім қосу модальі */}
+      {showAddSubSectionModal && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 print:hidden">
+          <div className={`border rounded-2xl p-6 max-w-md w-full shadow-2xl ${isDark ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-900'}`}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-bold">Жаңа бөлім қосу</h3>
+              <button onClick={() => setShowAddSubSectionModal(false)} className="text-slate-400 hover:text-slate-200"><X size={18} /></button>
+            </div>
+            <form onSubmit={handleAddSubSection} className="space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-slate-400 mb-1">Бөлім атауы</label>
+                <input
+                  type="text"
+                  placeholder="Мысалы: Диагностикасы"
+                  value={newSubTitle}
+                  onChange={(e) => setNewSubTitle(e.target.value)}
+                  className={`w-full px-3 py-2 border rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-teal-500/20 ${isDark ? 'bg-slate-950 border-slate-800 text-slate-100' : 'bg-slate-50 border-slate-300 text-slate-900'}`}
+                  required
+                  autoFocus
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-400 mb-1">Маңыздылық тегі</label>
+                <select
+                  value={newSubTag}
+                  onChange={(e) => setNewSubTag(e.target.value)}
+                  className={`w-full px-3 py-2 border rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-teal-500/20 ${isDark ? 'bg-slate-950 border-slate-800 text-slate-100' : 'bg-slate-50 border-slate-300 text-slate-900'}`}
+                >
+                  <option value="Ақпарат">Ақпарат</option>
+                  <option value="Маңызды">Маңызды</option>
+                  <option value="Шұғыл">Шұғыл</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-400 mb-1">Мазмұны</label>
+                <textarea
+                  rows={4}
+                  placeholder="Бөлім мазмұнын жазыңыз..."
+                  value={newSubContent}
+                  onChange={(e) => setNewSubContent(e.target.value)}
+                  className={`w-full px-3 py-2 border rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-teal-500/20 ${isDark ? 'bg-slate-950 border-slate-800 text-slate-100' : 'bg-slate-50 border-slate-300 text-slate-900'}`}
+                  required
+                />
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <button type="button" onClick={() => setShowAddSubSectionModal(false)} className="px-4 py-2 rounded-xl text-xs font-medium text-slate-400 hover:bg-slate-800/20">Болдырмау</button>
+                <button type="submit" className="px-4 py-2 bg-teal-600 text-white rounded-xl text-xs font-medium hover:bg-teal-500 shadow-sm">Сақтау</button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
+
+      {/* Бүйірлік мәзір (Sidebar) */}
+      <aside className={`${isSidebarOpen ? 'w-64' : 'w-0'} transition-all duration-300 border-r flex flex-col z-20 overflow-hidden print:hidden ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
+        <div className={`p-4 border-b flex items-center justify-between ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
+          <div className="flex items-center gap-2 font-semibold">
+            <div className="w-6 h-6 rounded-lg bg-teal-500 flex items-center justify-center text-slate-950 text-xs font-bold">M</div>
+            <span>MedStudy Pro</span>
+          </div>
+          <button onClick={() => setIsSidebarOpen(false)} className="text-slate-400 hover:text-slate-200">
+            <X size={18} />
+          </button>
+        </div>
+
+        {/* Категориялар */}
+        <div className="flex-1 overflow-y-auto p-2 space-y-1">
+          <div className="text-xs font-medium text-slate-500 px-2 py-1">Категориялар</div>
+          <button
+            onClick={() => setSelectedCategory(null)}
+            className={`w-full text-left px-2.5 py-2 rounded-xl flex items-center gap-2 text-xs transition-colors ${!selectedCategory ? (isDark ? 'bg-slate-800 text-teal-400 font-medium' : 'bg-slate-200 text-teal-700 font-medium') : 'text-slate-400 hover:opacity-80'}`}
+          >
+            <Folder size={16} />
+            <span>Барлық категориялар</span>
+          </button>
+          {categories.map(cat => (
+            <button
+              key={cat}
+              onClick={() => setSelectedCategory(cat)}
+              className={`w-full text-left px-2.5 py-2 rounded-xl flex items-center gap-2 text-xs transition-colors ${selectedCategory === cat ? 'bg-teal-500/10 text-teal-400 font-medium border border-teal-500/20' : 'text-slate-400 hover:opacity-80'}`}
+            >
+              <Folder size={16} className={selectedCategory === cat ? 'text-teal-400' : 'text-slate-500'} />
+              <span>{cat}</span>
+            </button>
+          ))}
+        </div>
+
+        {/* Бұлттық синхрондау және Auth күйі */}
+        <div className={`p-3 border-t space-y-2 text-xs ${isDark ? 'border-slate-800 bg-slate-900/50' : 'border-slate-200 bg-slate-100'}`}>
+          <div className="flex items-center justify-between text-slate-400">
+            <span className="flex items-center gap-1.5">
+              <Cloud size={14} className={saveStatus === 'synced' ? 'text-teal-400' : 'text-amber-400 animate-pulse'} />
+              {saveStatus === 'synced' ? 'Бұлтта сақталды' : 'Сақталуда...'}
+            </span>
+            <span>
+              {session ? (
+                <button onClick={handleLogout} className="text-rose-400 hover:underline flex items-center gap-1">
+                  <LogOut size={12} /> Шығу
+                </button>
+              ) : (
+                <button onClick={() => setShowAuthModal(true)} className="text-teal-400 hover:underline flex items-center gap-1">
+                  <Lock size={12} /> Кіру
+                </button>
+              )}
+            </span>
+          </div>
+          <button 
+            onClick={fetchNotesFromCloud} 
+            className={`w-full border py-1.5 px-2 rounded-xl flex items-center justify-center gap-1 font-medium transition-colors ${isDark ? 'border-slate-800 bg-slate-950 text-slate-300 hover:bg-slate-800' : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'}`}
+          >
+            <RefreshCw size={12} /> Деректерді жаңарту
+          </button>
+        </div>
+      </aside>
+
+      {/* Негізгі бет */}
+      <main className="flex-1 flex flex-col min-w-0">
+        <header className={`h-14 border-b flex items-center justify-between px-4 gap-4 print:hidden ${isDark ? 'border-slate-800 bg-slate-900/50' : 'border-slate-200 bg-slate-50'}`}>
+          <div className="flex items-center gap-3 flex-1">
+            {!isSidebarOpen && (
+              <button onClick={() => setIsSidebarOpen(true)} className="p-1.5 hover:opacity-80 rounded-xl text-slate-400">
+                <Menu size={18} />
+              </button>
+            )}
+            <div className="relative flex-1 max-w-md">
+              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+              <input
+                type="text"
+                placeholder="Іздеу..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className={`w-full pl-9 pr-4 py-1.5 border rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-teal-500/20 ${isDark ? 'bg-slate-950 border-slate-800 text-slate-100' : 'bg-white border-slate-300 text-slate-900'}`}
+              />
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={toggleTheme}
+              className={`px-3 py-1.5 border rounded-xl text-xs font-medium flex items-center gap-1.5 transition-colors ${isDark ? 'border-slate-800 bg-slate-900 text-amber-400 hover:bg-slate-800' : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-100'}`}
+              title="Түсті ауыстыру"
+            >
+              {isDark ? <Sun size={14} /> : <Moon size={14} />}
+              <span>{isDark ? 'Жарық режим' : 'Түнгі режим'}</span>
+            </button>
+
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => setSelectedTagFilter(null)}
+                className={`px-3 py-1 rounded-xl text-xs font-medium transition-all ${!selectedTagFilter ? 'bg-teal-600 text-white' : (isDark ? 'bg-slate-900 border border-slate-800 text-slate-400 hover:bg-slate-800' : 'bg-white border border-slate-300 text-slate-600 hover:bg-slate-100')}`}
+              >
+                Барлығы
+              </button>
+              <button
+                onClick={() => setSelectedTagFilter('Шұғыл')}
+                className={`px-3 py-1 rounded-xl text-xs font-medium transition-all ${selectedTagFilter === 'Шұғыл' ? 'bg-rose-600 text-white' : 'bg-rose-500/10 border border-rose-500/20 text-rose-400 hover:bg-rose-500/20'}`}
+              >
+                Шұғыл
+              </button>
+            </div>
+            <button
+              onClick={() => window.print()}
+              className={`px-3 py-1.5 border rounded-xl text-xs font-medium flex items-center gap-1.5 transition-colors ${isDark ? 'border-slate-800 bg-slate-900 text-teal-400 hover:bg-slate-800' : 'border-slate-300 bg-white text-teal-700 hover:bg-slate-100'}`}
+            >
+              <Printer size={14} /> Печать
+            </button>
+          </div>
+        </header>
+
+        {/* Жұмыс аймағы */}
+        <div className="flex-1 flex overflow-hidden">
+          <div className={`w-72 border-r flex flex-col print:hidden ${isDark ? 'border-slate-800 bg-slate-900/30' : 'border-slate-200 bg-slate-50/50'}`}>
+            <div className={`p-3 border-b flex items-center justify-between ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
+              <span className="font-medium text-xs text-slate-500 uppercase tracking-wider">Нозологиялар ({filteredDiseases.length})</span>
+              <button 
+                onClick={() => requireAuth(() => setShowAddDiseaseModal(true))}
+                className="p-1.5 bg-teal-600 text-white hover:bg-teal-500 rounded-xl shadow-sm transition-transform active:scale-95"
+                title="Жаңа ауру қосу"
+              >
+                <Plus size={16} />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-2 space-y-1">
+              {loading ? (
+                <div className="text-center py-6 text-xs text-slate-500">Жүктелуде...</div>
+              ) : filteredDiseases.map(disease => (
+                <div
+                  key={disease.id}
+                  onClick={() => setSelectedDiseaseId(disease.id)}
+                  className={`p-2.5 rounded-xl cursor-pointer transition-all flex items-center justify-between group ${
+                    selectedDiseaseId === disease.id 
+                      ? (isDark ? 'bg-slate-800 border border-slate-700 shadow-sm' : 'bg-teal-50 border border-teal-200 shadow-sm') 
+                      : (isDark ? 'hover:bg-slate-900 text-slate-400' : 'hover:bg-slate-100 text-slate-600')
+                  }`}
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className={`font-medium truncate ${selectedDiseaseId === disease.id ? 'text-teal-400' : ''}`}>{disease.title}</div>
+                    <div className="text-[11px] text-slate-500 mt-0.5 flex items-center gap-1">
+                      <Tag size={10} /> {disease.category} · {disease.sections.length} бөлім
+                    </div>
+                  </div>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteDisease(disease.id);
+                    }}
+                    className="opacity-0 group-hover:opacity-100 text-slate-500 hover:text-rose-400 p-1 rounded transition-opacity"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-6 max-w-4xl mx-auto w-full">
+            {currentDisease ? (
+              <div className="space-y-6">
+                <div className={`flex items-start justify-between border-b pb-4 ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
+                  <div className="space-y-2">
+                    <div className="inline-block px-2.5 py-0.5 bg-teal-500/10 border border-teal-500/20 text-teal-400 rounded-lg text-xs font-medium">
+                      {currentDisease.category}
+                    </div>
+                    <h1 className="text-2xl font-bold">{currentDisease.title}</h1>
+                    
+                    {currentDisease.image_url && (
+                      <div className="mt-2">
+                        <img src={currentDisease.image_url} alt="Ауру суреті" className="max-h-48 rounded-xl object-cover border border-slate-700 shadow-md" />
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => requireAuth(() => setShowAddSubSectionModal(true))}
+                    className="px-3 py-1.5 bg-teal-600 text-white rounded-xl text-xs font-medium hover:bg-teal-500 flex items-center gap-1.5 shadow-sm transition-colors print:hidden"
+                  >
+                    <Plus size={14} /> Бөлім қосу
+                  </button>
+                </div>
+
+                <div className="space-y-3">
+                  {currentDisease.sections.map((section) => {
+                    const isOpen = openSections[section.id] !== false;
+                    return (
+                      <div key={section.id} className={`border rounded-2xl overflow-hidden shadow-sm ${isDark ? 'border-slate-800 bg-slate-900/60' : 'border-slate-200 bg-white'}`}>
+                        <div className={`w-full px-4 py-3 flex items-center justify-between border-b ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
+                          <button
+                            onClick={() => toggleSection(section.id)}
+                            className="flex items-center gap-2 text-left flex-1 font-medium hover:opacity-80"
+                          >
+                            {isOpen ? <ChevronDown size={16} className="text-teal-400" /> : <ChevronRight size={16} className="text-slate-500" />}
+                            <span>{section.title}</span>
+                          </button>
+                          
+                          <div className="flex items-center gap-3">
+                            {section.tag && (
+                              <span className={`text-xs px-2.5 py-0.5 rounded-full font-medium ${
+                                section.tag === 'Шұғыл' ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20' :
+                                section.tag === 'Маңызды' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
+                              }`}>
+                                {section.tag}
+                              </span>
+                            )}
+                            <button
+                              onClick={() => handleDeleteSubSection(section.id)}
+                              className="text-slate-500 hover:text-rose-400 p-1 rounded transition-colors print:hidden"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        </div>
+
+                        {isOpen && (
+                          <div className="p-4">
+                            <textarea
+                              rows={3}
+                              value={section.content}
+                              onChange={(e) => handleUpdateSubSectionContent(section.id, e.target.value)}
+                              onBlur={(e) => saveContentToCloud(section.id, e.target.value)}
+                              placeholder="Мәтінді осы жерде тікелей өңдеңіз..."
+                              className={`w-full p-3 border rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-teal-500/20 leading-relaxed resize-y ${isDark ? 'bg-slate-950 border-slate-800 text-slate-200' : 'bg-slate-50 border-slate-300 text-slate-900'}`}
+                            />
+                            <div className="text-[10px] text-slate-500 mt-1 text-right print:hidden">💡 Өзгеріс өрістен шыққанда (blur) автоматты сақталады</div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : (
+              <div className="h-full flex items-center justify-center text-slate-500">
+                Сол жақ тізімнен ауруды таңдаңыз немесе жаңадан қосыңыз
+              </div>
+            )}
+          </div>
+        </div>
+      </main>
     </div>
   );
 }
