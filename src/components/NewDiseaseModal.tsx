@@ -41,7 +41,7 @@ export const NewDiseaseModal: React.FC<NewDiseaseModalProps> = ({ onClose, onCre
             <label className="text-[11px] text-slate-400 mb-1 block">Категория (қалағаныңызды еркін жазыңыз)</label>
             <input 
               type="text" 
-              placeholder="Мысалы: Кардиология, Педиатрия..." 
+              placeholder="Мысалы: Хирургия, Терапия..." 
               value={newCategory} 
               onChange={e => setNewCategory(e.target.value)} 
               required 
