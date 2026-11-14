@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 
 // ==========================================
-// 1. TYPESCRIPT / JAVASCRIPT INTERFACES
+// 1. TYPESCRIPT INTERFACES
 // ==========================================
 interface Section {
   id: string;
@@ -253,7 +253,6 @@ export default function App() {
     if (error) {
       showToast('❌ Ауруды қосу қатесі');
     } else if (data) {
-      // Create default section
       await supabase.from('sections').insert([
         { disease_id: data.id, title: 'Жалпы сипаттама', content: 'Мұнда сипаттама жазылады...', tag: 'Ақпарат' }
       ]);
@@ -305,7 +304,6 @@ export default function App() {
 
       <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} onLogin={handleLogin} authError={authError} />
 
-      {/* New Disease Modal */}
       {showNewDiseaseModal && (
         <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 max-w-sm w-full shadow-2xl">
