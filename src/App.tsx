@@ -118,6 +118,19 @@ export default function App() {
     }
   };
 
+  // МЫНА ЖЕРДЕ handleAddSection функциясы орналасқан:
+  const handleAddSection = async (diseaseId: string, title: string) => {
+    const { error } = await supabase.from('sections').insert([
+      { disease_id: diseaseId, title: title, content: 'Конспект жазыңыз...', tag: 'Ақпарат' }
+    ]);
+    if (!error) {
+      await fetchNotesFromCloud();
+      showToast('✅ Жаңа бөлім қосылды');
+    } else {
+      showToast('❌ Бөлім қосу қатесі');
+    }
+  };
+
   const handleDeleteDisease = async (id: string) => {
     if (!session) return setShowAuthModal(true);
     if (window.confirm('Бұл ауруды жоюға сенімдісіз бе?')) {
@@ -173,6 +186,7 @@ export default function App() {
         signOut={() => supabase.auth.signOut()}
       />
 
+      {/* МЫНА ЖЕРДЕ ContentArea компонентіне onAddSection арқылы беріліп тұр */}
       <ContentArea 
         currentDisease={currentDisease}
         searchQuery={searchQuery}
@@ -181,6 +195,7 @@ export default function App() {
         setIsDarkMode={setIsDarkMode}
         session={session}
         saveContentToCloud={saveContentToCloud}
+        onAddSection={handleAddSection}
       />
     </div>
   );

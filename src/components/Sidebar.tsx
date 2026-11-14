@@ -22,7 +22,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   loading, setShowNewDiseaseModal, setShowAuthModal, handleDeleteDisease, signOut
 }) => {
   return (
-    <aside className="w-72 border-r border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 flex flex-col h-full">
+    <aside className="w-72 border-r border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 flex flex-col h-screen shrink-0">
       <div className="p-4 border-b border-slate-200 dark:border-slate-800 font-bold flex items-center gap-2">
         <div className="w-6 h-6 bg-teal-500 rounded-lg flex items-center justify-center text-white text-xs">M</div>
         <span>MedStudy Pro</span>
@@ -36,13 +36,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
         )}
       </div>
 
-      <div className="flex-1 overflow-y-auto p-3 space-y-1">
+      {/* h-0 flex-1 және min-h-0 сырғытудың (scroll) дұрыс жұмыс істеуін қамтамасыз етеді */}
+      <div className="flex-1 overflow-y-auto min-h-0 p-3 space-y-1">
         <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-2">Категориялар ({categories.length})</div>
-        <button onClick={() => setSelectedCategory(null)} className={`w-full text-left px-3 py-2 rounded-xl text-xs font-medium ${!selectedCategory ? 'bg-teal-50 dark:bg-slate-800 text-teal-600 dark:text-teal-400' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-200/50'}`}>
+        <button onClick={() => setSelectedCategory(null)} className={`w-full text-left px-3 py-2 rounded-xl text-xs font-medium ${!selectedCategory ? 'bg-teal-50 dark:bg-slate-800 text-teal-600 dark:text-teal-400' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-200/50 dark:hover:bg-slate-800/50'}`}>
           Барлық категориялар
         </button>
         {categories.map(cat => (
-          <button key={cat} onClick={() => setSelectedCategory(cat)} className={`w-full text-left px-3 py-2 rounded-xl text-xs font-medium ${selectedCategory === cat ? 'bg-teal-50 dark:bg-slate-800 text-teal-600 dark:text-teal-400' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-200/50'}`}>
+          <button key={cat} onClick={() => setSelectedCategory(cat)} className={`w-full text-left px-3 py-2 rounded-xl text-xs font-medium ${selectedCategory === cat ? 'bg-teal-50 dark:bg-slate-800 text-teal-600 dark:text-teal-400' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-200/50 dark:hover:bg-slate-800/50'}`}>
             📁 {cat}
           </button>
         ))}
@@ -60,7 +61,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         ))}
       </div>
 
-      <div className="p-3 border-t border-slate-200 dark:border-slate-800 text-xs flex justify-between items-center">
+      <div className="p-3 border-t border-slate-200 dark:border-slate-800 text-xs flex justify-between items-center bg-slate-50 dark:bg-slate-900">
         <span className="text-slate-500 flex items-center gap-1"><Cloud size={14} className="text-teal-500" /> Сақталды</span>
         {session ? (
           <button onClick={signOut} className="text-rose-500 flex items-center gap-1 hover:underline"><LogOut size={12} /> Шығу</button>
