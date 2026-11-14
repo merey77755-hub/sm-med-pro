@@ -3,11 +3,11 @@ import { createClient } from '@supabase/supabase-js';
 import { 
   Folder, ChevronRight, ChevronDown, Search, 
   ShieldCheck, Cloud, LogOut, Sun, Moon,
-  Menu, X, Tag, Trash2, Lock
+  Menu, X, Tag, Trash2, Lock, Plus
 } from 'lucide-react';
 
 // ==========================================
-// 1. TYPESCRIPT ИНТЕРФЕЙСТЕРІ (Қатаң түрде тексеру үшін)
+// 1. TYPESCRIPT / JAVASCRIPT INTERFACES
 // ==========================================
 interface Section {
   id: string;
@@ -26,7 +26,7 @@ interface Disease {
 }
 
 // ==========================================
-// 2. ҚАУІПСІЗ SUPABASE БАПТАУЛАРЫ (.env арқылы)
+// 2. SUPABASE CONFIGURATION
 // ==========================================
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
@@ -34,7 +34,7 @@ const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
 const supabase = createClient(SUPABASE_URL || '', SUPABASE_ANON_KEY || '');
 
 // ==========================================
-// 3. БӨЛІНГЕН КОМПОНЕНТТЕР
+// 3. AUTH MODAL COMPONENT
 // ==========================================
 const AuthModal: React.FC<{
   isOpen: boolean;
@@ -63,12 +63,12 @@ const AuthModal: React.FC<{
           <input
             type="email" placeholder="Email" required autoFocus
             value={email} onChange={(e) => setEmail(e.target.value)}
-            className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl text-xs outline-none focus:ring-2 focus:ring-teal-500/50"
+            className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl text-xs outline-none focus:ring-2 focus:ring-teal-500/50 text-slate-800 dark:text-slate-200"
           />
           <input
             type="password" placeholder="Пароль" required
             value={password} onChange={(e) => setPassword(e.target.value)}
-            className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl text-xs outline-none focus:ring-2 focus:ring-teal-500/50"
+            className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl text-xs outline-none focus:ring-2 focus:ring-teal-500/50 text-slate-800 dark:text-slate-200"
           />
           {authError && <div className="text-xs text-rose-500 font-medium">{authError}</div>}
           <div className="flex justify-end gap-2 pt-2">
@@ -81,6 +81,9 @@ const AuthModal: React.FC<{
   );
 };
 
+// ==========================================
+// 4. SECTION ITEM COMPONENT
+// ==========================================
 interface SectionItemProps {
   section: Section;
   session: any;
@@ -96,13 +99,8 @@ const SectionItem: React.FC<SectionItemProps> = ({
   const [localContent, setLocalContent] = useState(section.content);
 
   useEffect(() => {
-    if (localContent === section.content) return;
-    const handler = setTimeout(async () => {
-      try { await saveContentToCloud(section.id, localContent); } 
-      catch { setLocalContent(section.content); } 
-    }, 1500);
-    return () => clearTimeout(handler);
-  }, [localContent, section.content, section.id, saveContentToCloud]);
+    setLocalContent(section.content);
+  }, [section.content]);
 
   const handleBlur = () => {
     if (localContent !== section.content) {
@@ -128,7 +126,7 @@ const SectionItem: React.FC<SectionItemProps> = ({
             </span>
           )}
           {session && (
-            <button onClick={() => handleDelete(section.id)} className="text-slate-400 hover:text-rose-500 p-1 print:hidden">
+            <button onClick={() => handleDelete(section.id)} className="text-slate-400 hover:text-rose-500 p-1 print:hidden" title="Бөлімді жою">
               <Trash2 size={14} />
             </button>
           )}
@@ -147,6 +145,9 @@ const SectionItem: React.FC<SectionItemProps> = ({
               !session ? 'bg-slate-50 dark:bg-slate-900/50 cursor-not-allowed opacity-80' : 'bg-white dark:bg-slate-950'
             } border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-200`}
           />
+          {!session && (
+            <div className="text-[10px] text-slate-400 mt-1 italic">Өзгерістерді сақтау үшін жүйеге кіріңіз.</div>
+          )}
         </div>
       )}
     </div>
@@ -154,7 +155,7 @@ const SectionItem: React.FC<SectionItemProps> = ({
 };
 
 // ==========================================
-// 4. НЕГІЗГІ APP КОМПОНЕНТІ
+// 5. MAIN APP COMPONENT
 // ==========================================
 export default function App() {
   const [notes, setNotes] = useState<Disease[]>([]);
@@ -174,13 +175,22 @@ export default function App() {
   const [authError, setAuthError] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
+  // New Disease Modal States
+  const [showNewDiseaseModal, setShowNewDiseaseModal] = useState(false);
+  const [newTitle, setNewTitle] = useState('');
+  const [newCategory, setNewCategory] = useState('Хирургия');
+
   const showToast = useCallback((msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3000);
   }, []);
 
   useEffect(() => {
-    document.documentElement.classList.toggle('dark', theme === 'dark');
+    if (theme === 'dark') {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
     localStorage.setItem('theme', theme);
   }, [theme]);
 
@@ -232,6 +242,29 @@ export default function App() {
     })));
   }, [showToast]);
 
+  const handleCreateDisease = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newTitle.trim()) return;
+
+    const { data, error } = await supabase.from('diseases').insert([
+      { title: newTitle, category: newCategory }
+    ]).select().single();
+
+    if (error) {
+      showToast('❌ Ауруды қосу қатесі');
+    } else if (data) {
+      // Create default section
+      await supabase.from('sections').insert([
+        { disease_id: data.id, title: 'Жалпы сипаттама', content: 'Мұнда сипаттама жазылады...', tag: 'Ақпарат' }
+      ]);
+      setShowNewDiseaseModal(false);
+      setNewTitle('');
+      await fetchNotesFromCloud();
+      setSelectedDiseaseId(data.id);
+      showToast('✅ Жаңа ауру қосылды');
+    }
+  };
+
   const handleDeleteDisease = async (id: string) => {
     if (!session) return setShowAuthModal(true);
     if (window.confirm('Бұл конспектіні жоюға сенімдісіз бе?')) {
@@ -272,13 +305,43 @@ export default function App() {
 
       <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} onLogin={handleLogin} authError={authError} />
 
-      {isSidebarOpen && (
-        <div 
-          className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-20 md:hidden transition-opacity"
-          onClick={() => setIsSidebarOpen(false)}
-        />
+      {/* New Disease Modal */}
+      {showNewDiseaseModal && (
+        <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 max-w-sm w-full shadow-2xl">
+            <div className="flex items-center justify-between mb-4">
+              <span className="font-semibold text-sm">Жаңа ауру қосу</span>
+              <button onClick={() => setShowNewDiseaseModal(false)} className="text-slate-400 hover:text-slate-200"><X size={18} /></button>
+            </div>
+            <form onSubmit={handleCreateDisease} className="space-y-3">
+              <input
+                type="text" placeholder="Ауру атауы (мысалы: Аппендицит)" required autoFocus
+                value={newTitle} onChange={(e) => setNewTitle(e.target.value)}
+                className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl text-xs outline-none focus:ring-2 focus:ring-teal-500 text-slate-800 dark:text-slate-200"
+              />
+              <select
+                value={newCategory} onChange={(e) => setNewCategory(e.target.value)}
+                className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl text-xs outline-none focus:ring-2 focus:ring-teal-500 text-slate-800 dark:text-slate-200"
+              >
+                <option value="Хирургия">Хирургия</option>
+                <option value="Акушерлік және гинекология">Акушерлік және гинекология</option>
+                <option value="Терапия">Терапия</option>
+                <option value="Басқалар">Басқалар</option>
+              </select>
+              <div className="flex justify-end gap-2 pt-2">
+                <button type="button" onClick={() => setShowNewDiseaseModal(false)} className="px-4 py-2 rounded-xl text-xs text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800">Болдырмау</button>
+                <button type="submit" className="px-4 py-2 bg-teal-600 text-white rounded-xl text-xs font-medium hover:bg-teal-500">Қосу</button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
 
+      {isSidebarOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-20 md:hidden transition-opacity" onClick={() => setIsSidebarOpen(false)} />
+      )}
+
+      {/* Sidebar */}
       <aside className={`${isSidebarOpen ? 'translate-x-0 w-72' : '-translate-x-full md:translate-x-0 md:w-64'} fixed md:static inset-y-0 left-0 transition-transform duration-300 flex flex-col z-30 overflow-hidden print:hidden border-r border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900`}>
         <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
           <div className="flex items-center gap-2 font-semibold">
@@ -299,6 +362,17 @@ export default function App() {
               <span>{cat}</span>
             </button>
           ))}
+
+          {session && (
+            <div className="pt-4 px-2">
+              <button 
+                onClick={() => setShowNewDiseaseModal(true)}
+                className="w-full py-2 px-3 bg-teal-600 hover:bg-teal-500 text-white rounded-xl text-xs font-medium flex items-center justify-center gap-2 shadow-sm transition-all"
+              >
+                <Plus size={14} /> Жаңа ауру қосу
+              </button>
+            </div>
+          )}
         </div>
 
         <div className="p-3 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50 space-y-2 text-xs">
@@ -318,23 +392,25 @@ export default function App() {
         </div>
       </aside>
 
+      {/* Main Content */}
       <main className="flex-1 flex flex-col min-w-0 z-10 bg-white dark:bg-slate-950">
         <header className="h-14 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50 flex items-center justify-between px-4 gap-2 print:hidden">
           <div className="flex items-center gap-2 flex-1">
             <button onClick={() => setIsSidebarOpen(true)} className="md:hidden text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"><Menu size={20} /></button>
             <div className="relative flex-1 max-w-md">
               <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input type="text" placeholder="Іздеу..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full pl-9 pr-4 py-1.5 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl text-xs outline-none focus:ring-2 focus:ring-teal-500/50" />
+              <input type="text" placeholder="Іздеу..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full pl-9 pr-4 py-1.5 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl text-xs outline-none focus:ring-2 focus:ring-teal-500/50 text-slate-800 dark:text-slate-200" />
             </div>
           </div>
-          <button onClick={() => setTheme(prev => prev === 'dark' ? 'light' : 'dark')} className="p-2 border border-slate-300 dark:border-slate-800 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800">
+          <button onClick={() => setTheme(prev => prev === 'dark' ? 'light' : 'dark')} className="p-2 border border-slate-300 dark:border-slate-800 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
             {theme === 'dark' ? <Sun size={14} className="text-amber-400" /> : <Moon size={14} className="text-slate-600" />}
           </button>
         </header>
 
         <div className="flex-1 flex overflow-hidden">
+          {/* Disease List */}
           <div className={`${selectedDiseaseId && window.innerWidth < 768 ? 'hidden' : 'flex'} w-full md:w-72 border-r border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/30 flex-col print:hidden`}>
-            <div className="p-3 border-b border-slate-200 dark:border-slate-800">
+            <div className="p-3 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
               <span className="font-medium text-xs text-slate-500 uppercase tracking-wider">Аурулар ({filteredDiseases.length})</span>
             </div>
             <div className="flex-1 overflow-y-auto p-2 space-y-1">
@@ -354,6 +430,7 @@ export default function App() {
             </div>
           </div>
 
+          {/* Disease Detail View */}
           <div className={`${!selectedDiseaseId && window.innerWidth < 768 ? 'hidden' : 'flex'} flex-1 overflow-y-auto p-4 md:p-6 max-w-4xl mx-auto w-full flex-col`}>
             <button className="md:hidden mb-4 text-teal-600 text-xs font-medium flex items-center gap-1 w-max" onClick={() => setSelectedDiseaseId(null)}>
                ← Тізімге қайту
