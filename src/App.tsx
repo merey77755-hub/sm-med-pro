@@ -144,12 +144,10 @@ export default function App() {
     const targetIndex = direction === 'up' ? index - 1 : index + 1;
     if (targetIndex < 0 || targetIndex >= newSections.length) return;
 
-    // Орындарын ауыстыру
     const temp = newSections[index];
     newSections[index] = newSections[targetIndex];
     newSections[targetIndex] = temp;
 
-    // Бөлімдерді state-те жаңарту
     setNotes(prev => prev.map(n => n.id === currentDisease?.id ? { ...n, sections: newSections } : n));
   };
 
@@ -235,6 +233,8 @@ export default function App() {
         onMoveSection={handleMoveSection}
         isSidebarOpen={isSidebarOpen}
         setIsSidebarOpen={setIsSidebarOpen}
+        setShowAuthModal={setShowAuthModal}
+        signOut={() => supabase.auth.signOut()}
       />
     </div>
   );
