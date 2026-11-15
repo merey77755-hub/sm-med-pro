@@ -104,6 +104,21 @@ export default function App() {
     }
   };
 
+  // Ауру атауы мен категориясын жаңарту функциясы қосылды
+  const handleUpdateDisease = async (diseaseId: string, newTitle: string, newCategory: string) => {
+    const { error } = await supabase.from('diseases').update({
+      title: newTitle,
+      category: newCategory
+    }).eq('id', diseaseId);
+
+    if (!error) {
+      await fetchNotesFromCloud();
+      showToast('✅ Ауру атауы өзгертілді');
+    } else {
+      showToast('❌ Өзгерту қатесі');
+    }
+  };
+
   const handleAddSection = async (diseaseId: string, title: string) => {
     const { error } = await supabase.from('sections').insert([
       { disease_id: diseaseId, title: title, content: 'Конспект жазыңыз...', tag: 'Ақпарат' }
@@ -180,6 +195,7 @@ export default function App() {
         session={session}
         saveContentToCloud={saveContentToCloud}
         onAddSection={handleAddSection}
+        onUpdateDisease={handleUpdateDisease}
         isSidebarOpen={isSidebarOpen}
         setIsSidebarOpen={setIsSidebarOpen}
       />

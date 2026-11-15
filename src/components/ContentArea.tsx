@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Search, Plus, Image as ImageIcon, Printer, Menu } from 'lucide-react';
+import { Search, Plus, Image as ImageIcon, Printer, Menu, Edit3, X } from 'lucide-react';
 import { supabase } from '../supabase';
 
 interface ContentAreaProps {
@@ -9,16 +9,36 @@ interface ContentAreaProps {
   session: any;
   saveContentToCloud: (subId: string, content: string) => void;
   onAddSection: (diseaseId: string, title: string) => void;
+  onUpdateDisease: (diseaseId: string, newTitle: string, newCategory: string) => void;
   isSidebarOpen: boolean;
   setIsSidebarOpen: (val: boolean) => void;
 }
 
 export const ContentArea: React.FC<ContentAreaProps> = ({
-  currentDisease, searchQuery, setSearchQuery, session, saveContentToCloud, onAddSection, isSidebarOpen, setIsSidebarOpen
+  currentDisease, searchQuery, setSearchQuery, session, saveContentToCloud, onAddSection, onUpdateDisease, isSidebarOpen, setIsSidebarOpen
 }) => {
   const [newSectionTitle, setNewSectionTitle] = useState('');
   const [showAddSec, setShowAddSec] = useState(false);
   const [uploading, setUploading] = useState(false);
+
+  // Ауру атауы мен категориясын өңдеуге арналған стейттер
+  const [isEditingDisease, setIsEditingDisease] = useState(false);
+  const [editTitle, setEditTitle] = useState('');
+  const [editCategory, setEditCategory] = useState('');
+
+  const handleOpenEdit = () => {
+    if (!currentDisease) return;
+    setEditTitle(currentDisease.title);
+    setEditCategory(currentDisease.category);
+    setIsEditingDisease(true);
+  };
+
+  const handleSaveEdit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editTitle.trim() || !editCategory.trim() || !currentDisease) return;
+    onUpdateDisease(currentDisease.id, editTitle, editCategory);
+    setIsEditingDisease(false);
+  };
 
   const handleAddSectionSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -102,35 +122,43 @@ export const ContentArea: React.FC<ContentAreaProps> = ({
 
   return (
     <main className="flex-1 flex flex-col h-screen overflow-hidden bg-white text-slate-900 transition-all duration-300 print:h-auto print:overflow-visible">
-      {/* Телефон мен ноут үшін печать кезінде таза ақ фон мен дұрыс формат беретін стиль */}
-      <style>{`
-        @media print {
-          body, html {
-            background-color: #ffffff !important;
-            color: #000000 !important;
-            height: auto !important;
-            overflow: visible !important;
-          }
-          .print\\:hidden {
-            display: none !important;
-          }
-          main {
-            width: 100% !important;
-            max-width: 100% !important;
-            padding: 0 !important;
-            margin: 0 !important;
-            overflow: visible !important;
-          }
-          textarea {
-            border: none !important;
-            background: transparent !important;
-            resize: none !important;
-            padding: 0 !important;
-            box-shadow: none !important;
-            color: #000000 !important;
-          }
-        }
-      `}</style>
+      {/* Өңдеу модалды терезесі */}
+      {isEditingDisease && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 print:hidden">
+          <div className="bg-white p-6 rounded-2xl w-full max-w-sm shadow-2xl border border-slate-200">
+            <div className="flex justify-between items-center mb-4">
+              <span className="font-bold text-sm text-slate-900">Атауын немесе категорияны өңдеу</span>
+              <button onClick={() => setIsEditingDisease(false)} className="text-slate-500 hover:text-slate-700"><X size={18} /></button>
+            </div>
+            <form onSubmit={handleSaveEdit} className="space-y-3">
+              <div>
+                <label className="text-[11px] text-slate-400 mb-1 block">Ауру атауы</label>
+                <input 
+                  type="text" 
+                  value={editTitle} 
+                  onChange={e => setEditTitle(e.target.value)} 
+                  required 
+                  className="w-full p-2.5 bg-slate-100 border border-slate-300 rounded-xl text-xs outline-none text-slate-900" 
+                />
+              </div>
+              <div>
+                <label className="text-[11px] text-slate-400 mb-1 block">Категория (Пән атауы)</label>
+                <input 
+                  type="text" 
+                  value={editCategory} 
+                  onChange={e => setEditCategory(e.target.value)} 
+                  required 
+                  className="w-full p-2.5 bg-slate-100 border border-slate-300 rounded-xl text-xs outline-none text-slate-900" 
+                />
+              </div>
+              <div className="pt-2 flex gap-2">
+                <button type="button" onClick={() => setIsEditingDisease(false)} className="w-1/2 py-2.5 bg-slate-200 rounded-xl text-xs font-medium text-slate-700">Болдырмау</button>
+                <button type="submit" className="w-1/2 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-medium">Сақтау</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       <header className="h-14 border-b border-slate-200 px-4 md:px-6 flex items-center justify-between bg-slate-50/50 shrink-0 print:hidden">
         <div className="flex items-center gap-3">
@@ -160,7 +188,18 @@ export const ContentArea: React.FC<ContentAreaProps> = ({
           <>
             <div className="border-b border-slate-200 pb-4 flex flex-col sm:flex-row justify-between items-start sm:items-end gap-3 print:border-b print:border-slate-300">
               <div>
-                <span className="px-2.5 py-0.5 bg-teal-50 text-teal-600 rounded-lg text-xs font-medium print:bg-transparent print:text-teal-700 print:p-0">{currentDisease.category}</span>
+                <div className="flex items-center gap-2">
+                  <span className="px-2.5 py-0.5 bg-teal-50 text-teal-600 rounded-lg text-xs font-medium">{currentDisease.category}</span>
+                  {session && (
+                    <button 
+                      onClick={handleOpenEdit} 
+                      className="text-slate-400 hover:text-teal-600 flex items-center gap-1 text-[11px] transition-colors print:hidden"
+                      title="Атауын өңдеу"
+                    >
+                      <Edit3 size={13} /> Өзгерту
+                    </button>
+                  )}
+                </div>
                 <h1 className="text-xl md:text-2xl font-bold mt-2 text-slate-900 print:text-black">{currentDisease.title}</h1>
               </div>
               
