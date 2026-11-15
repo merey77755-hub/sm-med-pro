@@ -10,6 +10,7 @@ interface Section {
   id: string;
   title: string;
   content: string;
+  parent_id?: string | null;
   tag?: 'Шұғыл' | 'Маңызды' | 'Ақпарат';
   disease_id: string;
 }
@@ -93,7 +94,7 @@ export default function App() {
 
     if (!error && data) {
       await supabase.from('sections').insert([
-        { disease_id: data.id, title: 'Жалпы сипаттама', content: 'Мұнда конспект жазылады...', tag: 'Ақпарат' }
+        { disease_id: data.id, title: 'Жалпы сипаттама', content: 'Мұнда конспект жазылады...', parent_id: null, tag: 'Ақпарат' }
       ]);
       setShowNewDiseaseModal(false);
       await fetchNotesFromCloud();
@@ -129,7 +130,7 @@ export default function App() {
   };
 
   const handleDeleteSection = async (sectionId: string) => {
-    if (!window.confirm('Бұл бөлімді жоюға сенімдісіз бе?')) return;
+    if (!window.confirm('Бұл бөлімді (және оның барлық ішкі бөлімдерін) жоюға сенімдісіз бе?')) return;
     const { error } = await supabase.from('sections').delete().eq('id', sectionId);
     if (!error) {
       await fetchNotesFromCloud();
@@ -151,15 +152,16 @@ export default function App() {
     setNotes(prev => prev.map(n => n.id === currentDisease?.id ? { ...n, sections: newSections } : n));
   };
 
-  const handleAddSection = async (diseaseId: string, title: string) => {
+  // parentId арқылы негізгі немесе ішкі бөлім қосу функциясы
+  const handleAddSection = async (diseaseId: string, title: string, parentId: string | null = null) => {
     const { error } = await supabase.from('sections').insert([
-      { disease_id: diseaseId, title: title, content: 'Конспект жазыңыз...', tag: 'Ақпарат' }
+      { disease_id: diseaseId, title: title, content: 'Конспект жазыңыз...', parent_id: parentId, tag: 'Ақпарат' }
     ]);
     if (!error) {
       await fetchNotesFromCloud();
-      showToast('✅ Жаңа бөлім қосылды');
+      showToast('✅ Бөлім қосылды');
     } else {
-      showToast('❌ Бөлім қосу қатесі');
+      showToast('❌ Бөлім қосу қатесі: ' + error.message);
     }
   };
 

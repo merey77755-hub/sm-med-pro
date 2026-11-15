@@ -1,6 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Plus, Image as ImageIcon, Printer, Menu, Edit3, X, Trash2, ArrowUp, ArrowDown, Lock, LogOut } from 'lucide-react';
+import { Search, Plus, Image as ImageIcon, Printer, Menu, Edit3, X, Trash2, ArrowUp, ArrowDown, Lock, LogOut, CornerDownRight } from 'lucide-react';
 import { supabase } from '../supabase';
+
+interface Section {
+  id: string;
+  title: string;
+  content: string;
+  parent_id?: string | null;
+  disease_id: string;
+}
 
 interface ContentAreaProps {
   currentDisease: any;
@@ -8,7 +16,7 @@ interface ContentAreaProps {
   setSearchQuery: (q: string) => void;
   session: any;
   saveContentToCloud: (subId: string, content: string) => void;
-  onAddSection: (diseaseId: string, title: string) => void;
+  onAddSection: (diseaseId: string, title: string, parentId?: string | null) => void;
   onUpdateDisease: (diseaseId: string, newTitle: string, newCategory: string) => void;
   onUpdateSectionTitle: (sectionId: string, newTitle: string) => void;
   onDeleteSection: (sectionId: string) => void;
@@ -23,7 +31,7 @@ export const ContentArea: React.FC<ContentAreaProps> = ({
   currentDisease, searchQuery, setSearchQuery, session, saveContentToCloud, onAddSection, onUpdateDisease, onUpdateSectionTitle, onDeleteSection, onMoveSection, isSidebarOpen, setIsSidebarOpen, setShowAuthModal, signOut
 }) => {
   const [newSectionTitle, setNewSectionTitle] = useState('');
-  const [showAddSec, setShowAddSec] = useState(false);
+  const [showAddSec, setShowAddSec] = useState<string | null | boolean>(false); // false, true (root), немесе parentId (ішкі бөлім үшін)
   const [uploading, setUploading] = useState(false);
 
   const [isEditingDisease, setIsEditingDisease] = useState(false);
@@ -70,10 +78,10 @@ export const ContentArea: React.FC<ContentAreaProps> = ({
     setIsEditingDisease(false);
   };
 
-  const handleAddSectionSubmit = (e: React.FormEvent) => {
+  const handleAddSectionSubmit = (e: React.FormEvent, parentId: string | null = null) => {
     e.preventDefault();
     if (!newSectionTitle.trim() || !currentDisease) return;
-    onAddSection(currentDisease.id, newSectionTitle);
+    onAddSection(currentDisease.id, newSectionTitle, parentId);
     setNewSectionTitle('');
     setShowAddSec(false);
   };
@@ -126,7 +134,6 @@ export const ContentArea: React.FC<ContentAreaProps> = ({
     saveContentToCloud(sectionId, updatedContent);
   };
 
-  // Жүйеден шыққан кезде тек бір рет таза көрсетілетін функция
   const renderPublicContent = (content: string) => {
     if (!content) return <span className="text-slate-400">Мәтін жоқ</span>;
     const parts = content.split(/(!\[.*?\]\(.*?\))/g);
@@ -170,6 +177,143 @@ export const ContentArea: React.FC<ContentAreaProps> = ({
     );
   };
 
+  // Рекурсивті түрде бөлімдер мен олардың ішкі бөлімдерін ағаш тәрізді шығару функциясы
+  const renderSectionsTree = (parentId: string | null = null, level: number = 0) => {
+    if (!currentDisease || !currentDisease.sections) return null;
+    
+    const filteredSections = currentDisease.sections.filter((s: any) => (parentId === null ? !s.parent_id : s.parent_id === parentId));
+
+    if (filteredSections.length === 0 && level > 0) return null;
+
+    return filteredSections.map((section: any, index: number) => {
+      const currentText = localContents[section.id] !== undefined ? localContents[section.id] : (section.content || '');
+      const indentClass = level > 0 ? `ml-4 md:ml-8 border-l-2 border-teal-100 pl-3 md:pl-4 mt-3` : '';
+
+      return (
+        <div key={section.id} className={`space-y-3 ${indentClass}`}>
+          <div className="border border-slate-200 rounded-2xl p-4 bg-white shadow-sm space-y-3 print:border-none print:shadow-none print:p-0 print:mb-6">
+            <div className="flex justify-between items-center">
+              <div className="flex items-center gap-2">
+                {level > 0 && <CornerDownRight size={14} className="text-teal-500 shrink-0" />}
+                {editingSectionId === section.id ? (
+                  <div className="flex items-center gap-1">
+                    <input 
+                      type="text" 
+                      value={editSectionTitleText} 
+                      onChange={e => setEditSectionTitleText(e.target.value)}
+                      className="px-2 py-1 border border-slate-300 rounded-lg text-xs outline-none"
+                    />
+                    <button 
+                      onClick={() => {
+                        if (editSectionTitleText.trim()) {
+                          onUpdateSectionTitle(section.id, editSectionTitleText);
+                          setEditingSectionId(null);
+                        }
+                      }} 
+                      className="px-2 py-1 bg-teal-600 text-white rounded-lg text-xs"
+                    >
+                      Сақтау
+                    </button>
+                    <button onClick={() => setEditingSectionId(null)} className="px-2 py-1 bg-slate-200 text-slate-700 rounded-lg text-xs">Болдырмау</button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <span className={`font-semibold text-teal-600 ${level === 0 ? 'text-sm print:text-teal-700 print:text-base' : 'text-xs text-slate-700'}`}>{section.title}</span>
+                    {session && (
+                      <button 
+                        onClick={() => { setEditingSectionId(section.id); setEditSectionTitleText(section.title); }}
+                        className="text-slate-400 hover:text-teal-600 text-[11px] flex items-center gap-0.5 print:hidden"
+                        title="Бөлім атауын өзгерту"
+                      >
+                        <Edit3 size={12} /> Өзгерту
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2 print:hidden flex-wrap justify-end">
+                {session && (
+                  <>
+                    {/* Ішкі бөлім қосу батырмасы */}
+                    <button 
+                      onClick={() => setShowAddSec(section.id)} 
+                      className="px-2 py-1 bg-teal-50 hover:bg-teal-100 text-teal-600 rounded-lg text-[11px] font-medium flex items-center gap-1 transition-colors"
+                      title="Ішкі бөлім қосу"
+                    >
+                      <Plus size={12} /> Ішкі бөлім
+                    </button>
+
+                    <button onClick={() => onDeleteSection(section.id)} className="p-1 text-slate-400 hover:text-rose-600 rounded-lg" title="Жою">
+                      <Trash2 size={14} />
+                    </button>
+                  </>
+                )}
+
+                {session && (
+                  <label className="cursor-pointer px-2.5 py-1 bg-slate-100 hover:bg-slate-200 rounded-lg text-[11px] font-medium flex items-center gap-1.5 transition-colors text-slate-700">
+                    <ImageIcon size={14} className="text-teal-500" />
+                    <span>{uploading ? 'Жүктелуде...' : 'Фото (Ctrl+V)'}</span>
+                    <input 
+                      type="file" 
+                      accept="image/*" 
+                      className="hidden" 
+                      onChange={(e) => handleImageUpload(section.id, currentText, e)}
+                      disabled={uploading}
+                    />
+                  </label>
+                )}
+              </div>
+            </div>
+
+            {/* Бұл бөлімнің ішіне ішкі бөлім қосу формасы */}
+            {showAddSec === section.id && (
+              <form onSubmit={(e) => handleAddSectionSubmit(e, section.id)} className="p-3 bg-teal-50/50 border border-teal-200 rounded-xl flex flex-col sm:flex-row gap-2 print:hidden">
+                <input 
+                  type="text"
+                  placeholder="Ішкі бөлім атауы..."
+                  value={newSectionTitle}
+                  onChange={e => setNewSectionTitle(e.target.value)}
+                  className="flex-1 p-2 bg-white border border-slate-300 rounded-lg text-xs outline-none text-slate-900"
+                  required
+                />
+                <div className="flex gap-2">
+                  <button type="submit" className="px-3 py-2 bg-teal-600 text-white rounded-lg text-xs font-medium">Қосу</button>
+                  <button type="button" onClick={() => setShowAddSec(false)} className="px-3 py-2 bg-slate-200 rounded-lg text-xs font-medium text-slate-700">Жоқ</button>
+                </div>
+              </form>
+            )}
+
+            {/* Конспект жазу немесе оқу өрісі */}
+            {session ? (
+              <>
+                <textarea
+                  rows={5}
+                  value={currentText}
+                  onChange={(e) => handleTextChange(section.id, e.target.value)}
+                  onBlur={() => handleTextBlur(section.id)}
+                  onPaste={(e) => handlePaste(section.id, currentText, e)}
+                  placeholder="Конспектіні осында жазыңыз немесе суретті Ctrl+V арқылы қойыңыз..."
+                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-teal-500 text-xs leading-relaxed resize-y text-slate-900"
+                />
+                <div>
+                  {renderEditableImages(section.id, currentText)}
+                </div>
+              </>
+            ) : (
+              <div className="text-xs text-slate-800 whitespace-pre-wrap leading-relaxed py-2">
+                {renderPublicContent(currentText)}
+              </div>
+            )}
+          </div>
+
+          {/* Осы бөлімге тиесілі ішкі бөлімдерді рекурсивті түрде шығару */}
+          {renderSectionsTree(section.id, level + 1)}
+        </div>
+      );
+    });
+  };
+
   return (
     <main className="flex-1 flex flex-col h-screen overflow-hidden bg-white text-slate-900 transition-all duration-300 print:h-auto print:overflow-visible">
       {isEditingDisease && (
@@ -209,7 +353,7 @@ export const ContentArea: React.FC<ContentAreaProps> = ({
         </div>
       )}
 
-      {/* Жоғарғы панель (Телефонда да, ноутта да Кіру батырмасы тұрады) */}
+      {/* Жоғарғы панель */}
       <header className="h-14 border-b border-slate-200 px-3 md:px-6 flex items-center justify-between bg-slate-50/50 shrink-0 print:hidden">
         <div className="flex items-center gap-2 md:gap-3">
           <button 
@@ -275,7 +419,7 @@ export const ContentArea: React.FC<ContentAreaProps> = ({
 
                 {session && (
                   <button 
-                    onClick={() => setShowAddSec(!showAddSec)} 
+                    onClick={() => setShowAddSec(showAddSec === 'root' ? false : 'root')} 
                     className="px-3 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-medium flex items-center gap-1.5 transition-colors"
                   >
                     <Plus size={14} /> Бөлім қосу
@@ -284,8 +428,9 @@ export const ContentArea: React.FC<ContentAreaProps> = ({
               </div>
             </div>
 
-            {showAddSec && (
-              <form onSubmit={handleAddSectionSubmit} className="p-4 bg-slate-50 border border-slate-200 rounded-2xl flex flex-col sm:flex-row gap-2 print:hidden">
+            {/* Басты (root) бөлім қосу формасы */}
+            {showAddSec === 'root' && (
+              <form onSubmit={(e) => handleAddSectionSubmit(e, null)} className="p-4 bg-slate-50 border border-slate-200 rounded-2xl flex flex-col sm:flex-row gap-2 print:hidden">
                 <input 
                   type="text"
                   placeholder="Бөлім атауы (Мысалы: Диагностика, Емі)"
@@ -301,111 +446,10 @@ export const ContentArea: React.FC<ContentAreaProps> = ({
               </form>
             )}
 
+            {/* Бөлімдерді ағаш тәрізді (nested tree) көрсету */}
             <div className="space-y-4 print:space-y-6">
               {currentDisease.sections && currentDisease.sections.length > 0 ? (
-                currentDisease.sections.map((section: any, index: number) => {
-                  const currentText = localContents[section.id] !== undefined ? localContents[section.id] : (section.content || '');
-
-                  return (
-                    <div key={section.id} className="border border-slate-200 rounded-2xl p-4 bg-white shadow-sm space-y-3 print:border-none print:shadow-none print:p-0 print:mb-6">
-                      <div className="flex justify-between items-center">
-                        <div className="flex items-center gap-2">
-                          {editingSectionId === section.id ? (
-                            <div className="flex items-center gap-1">
-                              <input 
-                                type="text" 
-                                value={editSectionTitleText} 
-                                onChange={e => setEditSectionTitleText(e.target.value)}
-                                className="px-2 py-1 border border-slate-300 rounded-lg text-xs outline-none"
-                              />
-                              <button 
-                                onClick={() => {
-                                  if (editSectionTitleText.trim()) {
-                                    onUpdateSectionTitle(section.id, editSectionTitleText);
-                                    setEditingSectionId(null);
-                                  }
-                                }} 
-                                className="px-2 py-1 bg-teal-600 text-white rounded-lg text-xs"
-                              >
-                                Сақтау
-                              </button>
-                              <button onClick={() => setEditingSectionId(null)} className="px-2 py-1 bg-slate-200 text-slate-700 rounded-lg text-xs">Болдырмау</button>
-                            </div>
-                          ) : (
-                            <div className="flex items-center gap-2">
-                              <span className="font-semibold text-xs text-teal-600 text-sm print:text-teal-700 print:text-base">{section.title}</span>
-                              {session && (
-                                <button 
-                                  onClick={() => { setEditingSectionId(section.id); setEditSectionTitleText(section.title); }}
-                                  className="text-slate-400 hover:text-teal-600 text-[11px] flex items-center gap-0.5 print:hidden"
-                                  title="Бөлім атауын өзгерту"
-                                >
-                                  <Edit3 size={12} /> Өзгерту
-                                </button>
-                              )}
-                            </div>
-                          )}
-                        </div>
-
-                        <div className="flex items-center gap-2 print:hidden">
-                          {session && (
-                            <>
-                              {index > 0 && (
-                                <button onClick={() => onMoveSection(currentDisease.sections, index, 'up')} className="p-1 text-slate-500 hover:bg-slate-100 rounded-lg" title="Жоғары">
-                                  <ArrowUp size={14} />
-                                </button>
-                              )}
-                              {index < currentDisease.sections.length - 1 && (
-                                <button onClick={() => onMoveSection(currentDisease.sections, index, 'down')} className="p-1 text-slate-500 hover:bg-slate-100 rounded-lg" title="Төмен">
-                                  <ArrowDown size={14} />
-                                </button>
-                              )}
-                              <button onClick={() => onDeleteSection(section.id)} className="p-1 text-slate-400 hover:text-rose-600 rounded-lg" title="Жою">
-                                <Trash2 size={14} />
-                              </button>
-                            </>
-                          )}
-
-                          {session && (
-                            <label className="cursor-pointer px-2.5 py-1 bg-slate-100 hover:bg-slate-200 rounded-lg text-[11px] font-medium flex items-center gap-1.5 transition-colors text-slate-700">
-                              <ImageIcon size={14} className="text-teal-500" />
-                              <span>{uploading ? 'Жүктелуде...' : 'Фото (Ctrl+V)'}</span>
-                              <input 
-                                type="file" 
-                                accept="image/*" 
-                                className="hidden" 
-                                onChange={(e) => handleImageUpload(section.id, currentText, e)}
-                                disabled={uploading}
-                              />
-                            </label>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Жүйеге кіргенде ғана жазу өрісі мен фото астында шығады. Жүйеден шыққанда тек 1 рет таза форматта көрінеді */}
-                      {session ? (
-                        <>
-                          <textarea
-                            rows={6}
-                            value={currentText}
-                            onChange={(e) => handleTextChange(section.id, e.target.value)}
-                            onBlur={() => handleTextBlur(section.id)}
-                            onPaste={(e) => handlePaste(section.id, currentText, e)}
-                            placeholder="Конспектіні осында жазыңыз немесе суретті Ctrl+V арқылы қойыңыз..."
-                            className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-teal-500 text-xs leading-relaxed resize-y text-slate-900"
-                          />
-                          <div>
-                            {renderEditableImages(section.id, currentText)}
-                          </div>
-                        </>
-                      ) : (
-                        <div className="text-xs text-slate-800 whitespace-pre-wrap leading-relaxed py-2">
-                          {renderPublicContent(currentText)}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })
+                renderSectionsTree(null, 0)
               ) : (
                 <div className="text-xs text-slate-400 py-10 text-center">Бұл ауруға әлі бөлімдер қосылмаған.</div>
               )}
