@@ -30,8 +30,6 @@ export default function App() {
   const [selectedDiseaseId, setSelectedDiseaseId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   
-  const [saveStatus, setSaveStatus] = useState<'synced' | 'saving' | 'error'>('synced');
-  const [isDarkMode, setIsDarkMode] = useState(localStorage.getItem('theme') === 'dark');
   const [session, setSession] = useState<any>(null);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
@@ -44,16 +42,6 @@ export default function App() {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3000);
   }, []);
-
-  useEffect(() => {
-    if (isDarkMode) {
-      document.documentElement.classList.add('dark');
-      localStorage.setItem('theme', 'dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-      localStorage.setItem('theme', 'light');
-    }
-  }, [isDarkMode]);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => setSession(session));
@@ -87,13 +75,10 @@ export default function App() {
   };
 
   const saveContentToCloud = async (subId: string, newContent: string) => {
-    setSaveStatus('saving');
     const { error } = await supabase.from('sections').update({ content: newContent }).eq('id', subId);
     if (error) {
-      setSaveStatus('error');
       showToast('❌ Сақтау қатесі');
     } else {
-      setSaveStatus('synced');
       setNotes(prev => prev.map(n => ({
         ...n,
         sections: n.sections.map(s => s.id === subId ? { ...s, content: newContent } : s)
@@ -153,7 +138,7 @@ export default function App() {
   const currentDisease = notes.find(n => n.id === selectedDiseaseId);
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans text-sm">
+    <div className="flex h-screen w-screen overflow-hidden bg-white text-slate-900 font-sans text-sm">
       {toastMessage && <Toast message={toastMessage} />}
 
       {showAuthModal && (
@@ -192,8 +177,6 @@ export default function App() {
         currentDisease={currentDisease}
         searchQuery={searchQuery}
         setSearchQuery={setSearchQuery}
-        isDarkMode={isDarkMode}
-        setIsDarkMode={setIsDarkMode}
         session={session}
         saveContentToCloud={saveContentToCloud}
         onAddSection={handleAddSection}
