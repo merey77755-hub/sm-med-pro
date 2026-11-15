@@ -38,6 +38,7 @@ export default function App() {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const [showNewDiseaseModal, setShowNewDiseaseModal] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
   const showToast = useCallback((msg: string) => {
     setToastMessage(msg);
@@ -118,7 +119,6 @@ export default function App() {
     }
   };
 
-  // МЫНА ЖЕРДЕ handleAddSection функциясы орналасқан:
   const handleAddSection = async (diseaseId: string, title: string) => {
     const { error } = await supabase.from('sections').insert([
       { disease_id: diseaseId, title: title, content: 'Конспект жазыңыз...', tag: 'Ақпарат' }
@@ -184,9 +184,10 @@ export default function App() {
         setShowAuthModal={setShowAuthModal}
         handleDeleteDisease={handleDeleteDisease}
         signOut={() => supabase.auth.signOut()}
+        isSidebarOpen={isSidebarOpen}
+        setIsSidebarOpen={setIsSidebarOpen}
       />
 
-      {/* МЫНА ЖЕРДЕ ContentArea компонентіне onAddSection арқылы беріліп тұр */}
       <ContentArea 
         currentDisease={currentDisease}
         searchQuery={searchQuery}
@@ -196,6 +197,8 @@ export default function App() {
         session={session}
         saveContentToCloud={saveContentToCloud}
         onAddSection={handleAddSection}
+        isSidebarOpen={isSidebarOpen}
+        setIsSidebarOpen={setIsSidebarOpen}
       />
     </div>
   );

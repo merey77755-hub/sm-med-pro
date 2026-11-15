@@ -4,7 +4,7 @@ export default {
     "./index.html",
     "./src/**/*.{js,ts,jsx,tsx}",
   ],
-  darkMode: 'class', // Қараңғы режим үшін міндетті
+  darkMode: 'class',
   theme: {
     extend: {},
   },
