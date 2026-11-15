@@ -104,7 +104,6 @@ export default function App() {
     }
   };
 
-  // Ауру атауы мен категориясын жаңарту функциясы қосылды
   const handleUpdateDisease = async (diseaseId: string, newTitle: string, newCategory: string) => {
     const { error } = await supabase.from('diseases').update({
       title: newTitle,
@@ -117,6 +116,41 @@ export default function App() {
     } else {
       showToast('❌ Өзгерту қатесі');
     }
+  };
+
+  const handleUpdateSectionTitle = async (sectionId: string, newTitle: string) => {
+    const { error } = await supabase.from('sections').update({ title: newTitle }).eq('id', sectionId);
+    if (!error) {
+      await fetchNotesFromCloud();
+      showToast('✅ Бөлім атауы өзгертілді');
+    } else {
+      showToast('❌ Қате кетті');
+    }
+  };
+
+  const handleDeleteSection = async (sectionId: string) => {
+    if (!window.confirm('Бұл бөлімді жоюға сенімдісіз бе?')) return;
+    const { error } = await supabase.from('sections').delete().eq('id', sectionId);
+    if (!error) {
+      await fetchNotesFromCloud();
+      showToast('🗑️ Бөлім жойылды');
+    } else {
+      showToast('❌ Жою қатесі');
+    }
+  };
+
+  const handleMoveSection = async (sections: any[], index: number, direction: 'up' | 'down') => {
+    const newSections = [...sections];
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= newSections.length) return;
+
+    // Орындарын ауыстыру
+    const temp = newSections[index];
+    newSections[index] = newSections[targetIndex];
+    newSections[targetIndex] = temp;
+
+    // Бөлімдерді state-те жаңарту
+    setNotes(prev => prev.map(n => n.id === currentDisease?.id ? { ...n, sections: newSections } : n));
   };
 
   const handleAddSection = async (diseaseId: string, title: string) => {
@@ -196,6 +230,9 @@ export default function App() {
         saveContentToCloud={saveContentToCloud}
         onAddSection={handleAddSection}
         onUpdateDisease={handleUpdateDisease}
+        onUpdateSectionTitle={handleUpdateSectionTitle}
+        onDeleteSection={handleDeleteSection}
+        onMoveSection={handleMoveSection}
         isSidebarOpen={isSidebarOpen}
         setIsSidebarOpen={setIsSidebarOpen}
       />

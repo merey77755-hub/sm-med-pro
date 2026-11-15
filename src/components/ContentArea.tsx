@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Search, Plus, Image as ImageIcon, Printer, Menu, Edit3, X } from 'lucide-react';
+import { Search, Plus, Image as ImageIcon, Printer, Menu, Edit3, X, Trash2, ArrowUp, ArrowDown } from 'lucide-react';
 import { supabase } from '../supabase';
 
 interface ContentAreaProps {
@@ -10,21 +10,28 @@ interface ContentAreaProps {
   saveContentToCloud: (subId: string, content: string) => void;
   onAddSection: (diseaseId: string, title: string) => void;
   onUpdateDisease: (diseaseId: string, newTitle: string, newCategory: string) => void;
+  onUpdateSectionTitle: (sectionId: string, newTitle: string) => void;
+  onDeleteSection: (sectionId: string) => void;
+  onMoveSection: (sections: any[], index: number, direction: 'up' | 'down') => void;
   isSidebarOpen: boolean;
   setIsSidebarOpen: (val: boolean) => void;
 }
 
 export const ContentArea: React.FC<ContentAreaProps> = ({
-  currentDisease, searchQuery, setSearchQuery, session, saveContentToCloud, onAddSection, onUpdateDisease, isSidebarOpen, setIsSidebarOpen
+  currentDisease, searchQuery, setSearchQuery, session, saveContentToCloud, onAddSection, onUpdateDisease, onUpdateSectionTitle, onDeleteSection, onMoveSection, isSidebarOpen, setIsSidebarOpen
 }) => {
   const [newSectionTitle, setNewSectionTitle] = useState('');
   const [showAddSec, setShowAddSec] = useState(false);
   const [uploading, setUploading] = useState(false);
 
-  // Ауру атауы мен категориясын өңдеуге арналған стейттер
+  // Ауру атауын өңдеу
   const [isEditingDisease, setIsEditingDisease] = useState(false);
   const [editTitle, setEditTitle] = useState('');
   const [editCategory, setEditCategory] = useState('');
+
+  // Ішкі бөлім атауын өңдеу
+  const [editingSectionId, setEditingSectionId] = useState<string | null>(null);
+  const [editSectionTitleText, setEditSectionTitleText] = useState('');
 
   const handleOpenEdit = () => {
     if (!currentDisease) return;
@@ -122,7 +129,7 @@ export const ContentArea: React.FC<ContentAreaProps> = ({
 
   return (
     <main className="flex-1 flex flex-col h-screen overflow-hidden bg-white text-slate-900 transition-all duration-300 print:h-auto print:overflow-visible">
-      {/* Өңдеу модалды терезесі */}
+      {/* Ауру атауын өңдеу терезесі */}
       {isEditingDisease && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 print:hidden">
           <div className="bg-white p-6 rounded-2xl w-full max-w-sm shadow-2xl border border-slate-200">
@@ -241,24 +248,97 @@ export const ContentArea: React.FC<ContentAreaProps> = ({
 
             <div className="space-y-4 print:space-y-6">
               {currentDisease.sections && currentDisease.sections.length > 0 ? (
-                currentDisease.sections.map((section: any) => (
+                currentDisease.sections.map((section: any, index: number) => (
                   <div key={section.id} className="border border-slate-200 rounded-2xl p-4 bg-white shadow-sm space-y-3 print:border-none print:shadow-none print:p-0 print:mb-6">
                     <div className="flex justify-between items-center">
-                      <div className="font-semibold text-xs text-teal-600 text-sm print:text-teal-700 print:text-base">{section.title}</div>
-                      
-                      {session && (
-                        <label className="cursor-pointer px-2.5 py-1 bg-slate-100 hover:bg-slate-200 rounded-lg text-[11px] font-medium flex items-center gap-1.5 transition-colors text-slate-700 print:hidden">
-                          <ImageIcon size={14} className="text-teal-500" />
-                          <span>{uploading ? 'Жүктелуде...' : 'Фото (немесе Ctrl+V)'}</span>
-                          <input 
-                            type="file" 
-                            accept="image/*" 
-                            className="hidden" 
-                            onChange={(e) => handleImageUpload(section.id, section.content, e)}
-                            disabled={uploading}
-                          />
-                        </label>
-                      )}
+                      {/* Бөлім атауын өңдеу немесе көрсету */}
+                      <div className="flex items-center gap-2">
+                        {editingSectionId === section.id ? (
+                          <div className="flex items-center gap-1">
+                            <input 
+                              type="text" 
+                              value={editSectionTitleText} 
+                              onChange={e => setEditSectionTitleText(e.target.value)}
+                              className="px-2 py-1 border border-slate-300 rounded-lg text-xs outline-none"
+                            />
+                            <button 
+                              onClick={() => {
+                                if (editSectionTitleText.trim()) {
+                                  onUpdateSectionTitle(section.id, editSectionTitleText);
+                                  setEditingSectionId(null);
+                                }
+                              }} 
+                              className="px-2 py-1 bg-teal-600 text-white rounded-lg text-xs"
+                            >
+                              Сақтау
+                            </button>
+                            <button onClick={() => setEditingSectionId(null)} className="px-2 py-1 bg-slate-200 text-slate-700 rounded-lg text-xs">Болдырмау</button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-xs text-teal-600 text-sm print:text-teal-700 print:text-base">{section.title}</span>
+                            {session && (
+                              <button 
+                                onClick={() => { setEditingSectionId(section.id); setEditSectionTitleText(section.title); }}
+                                className="text-slate-400 hover:text-teal-600 text-[11px] flex items-center gap-0.5 print:hidden"
+                                title="Бөлім атауын өзгерту"
+                              >
+                                <Edit3 size={12} /> Өзгерту
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Батырмалар: Орнын ауыстыру, өшіру және фото қосу */}
+                      <div className="flex items-center gap-2 print:hidden">
+                        {session && (
+                          <>
+                            {/* Жоғары жылжыту */}
+                            {index > 0 && (
+                              <button 
+                                onClick={() => onMoveSection(currentDisease.sections, index, 'up')} 
+                                className="p-1 text-slate-500 hover:bg-slate-100 rounded-lg"
+                                title="Жоғары жылжыту"
+                              >
+                                <ArrowUp size={14} />
+                              </button>
+                            )}
+                            {/* Төмен жылжыту */}
+                            {index < currentDisease.sections.length - 1 && (
+                              <button 
+                                onClick={() => onMoveSection(currentDisease.sections, index, 'down')} 
+                                className="p-1 text-slate-500 hover:bg-slate-100 rounded-lg"
+                                title="Төмен жылжыту"
+                              >
+                                <ArrowDown size={14} />
+                              </button>
+                            )}
+                            {/* Бөлімді өшіру */}
+                            <button 
+                              onClick={() => onDeleteSection(section.id)} 
+                              className="p-1 text-slate-400 hover:text-rose-600 rounded-lg"
+                              title="Бөлімді жою"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </>
+                        )}
+
+                        {session && (
+                          <label className="cursor-pointer px-2.5 py-1 bg-slate-100 hover:bg-slate-200 rounded-lg text-[11px] font-medium flex items-center gap-1.5 transition-colors text-slate-700">
+                            <ImageIcon size={14} className="text-teal-500" />
+                            <span>{uploading ? 'Жүктелуде...' : 'Фото (Ctrl+V)'}</span>
+                            <input 
+                              type="file" 
+                              accept="image/*" 
+                              className="hidden" 
+                              onChange={(e) => handleImageUpload(section.id, section.content, e)}
+                              disabled={uploading}
+                            />
+                          </label>
+                        )}
+                      </div>
                     </div>
 
                     <textarea
