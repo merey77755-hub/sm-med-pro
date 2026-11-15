@@ -140,19 +140,33 @@ export default function App() {
     }
   };
 
-  const handleMoveSection = async (sections: any[], index: number, direction: 'up' | 'down') => {
-    const newSections = [...sections];
-    const targetIndex = direction === 'up' ? index - 1 : index + 1;
-    if (targetIndex < 0 || targetIndex >= newSections.length) return;
+  // Бөлімдердің орнын жоғары не төмен ауыстыру функциясы
+  const handleMoveSection = async (sections: any[], sectionId: string, direction: 'up' | 'down') => {
+    const targetSection = sections.find(s => s.id === sectionId);
+    if (!targetSection) return;
 
-    const temp = newSections[index];
-    newSections[index] = newSections[targetIndex];
-    newSections[targetIndex] = temp;
+    // Сол деңгейдегі (parent_id бойынша) бөлімдерді ғана сүзіп алу
+    const sameLevelSections = sections.filter(s => s.parent_id === targetSection.parent_id);
+    const index = sameLevelSections.findIndex(s => s.id === sectionId);
+
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= sameLevelSections.length) return;
+
+    const otherSection = sameLevelSections[targetIndex];
+
+    // Барлық секциялар массивіндегі орындарын ауыстыру
+    const newSections = [...sections];
+    const idx1 = newSections.findIndex(s => s.id === sectionId);
+    const idx2 = newSections.findIndex(s => s.id === otherSection.id);
+
+    const temp = newSections[idx1];
+    newSections[idx1] = newSections[idx2];
+    newSections[idx2] = temp;
 
     setNotes(prev => prev.map(n => n.id === currentDisease?.id ? { ...n, sections: newSections } : n));
+    showToast('✅ Орыны ауыстырылды');
   };
 
-  // parentId арқылы негізгі немесе ішкі бөлім қосу функциясы
   const handleAddSection = async (diseaseId: string, title: string, parentId: string | null = null) => {
     const { error } = await supabase.from('sections').insert([
       { disease_id: diseaseId, title: title, content: 'Конспект жазыңыз...', parent_id: parentId, tag: 'Ақпарат' }
@@ -187,7 +201,7 @@ export default function App() {
   const currentDisease = notes.find(n => n.id === selectedDiseaseId);
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-white text-slate-900 font-sans text-sm">
+    <div className="flex min-h-screen w-screen bg-white text-slate-900 font-sans text-sm">
       {toastMessage && <Toast message={toastMessage} />}
 
       {showAuthModal && (

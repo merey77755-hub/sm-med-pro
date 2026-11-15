@@ -2,14 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { Search, Plus, Image as ImageIcon, Printer, Menu, Edit3, X, Trash2, ArrowUp, ArrowDown, Lock, LogOut, CornerDownRight } from 'lucide-react';
 import { supabase } from '../supabase';
 
-interface Section {
-  id: string;
-  title: string;
-  content: string;
-  parent_id?: string | null;
-  disease_id: string;
-}
-
 interface ContentAreaProps {
   currentDisease: any;
   searchQuery: string;
@@ -20,7 +12,7 @@ interface ContentAreaProps {
   onUpdateDisease: (diseaseId: string, newTitle: string, newCategory: string) => void;
   onUpdateSectionTitle: (sectionId: string, newTitle: string) => void;
   onDeleteSection: (sectionId: string) => void;
-  onMoveSection: (sections: any[], index: number, direction: 'up' | 'down') => void;
+  onMoveSection: (sections: any[], sectionId: string, direction: 'up' | 'down') => void;
   isSidebarOpen: boolean;
   setIsSidebarOpen: (val: boolean) => void;
   setShowAuthModal: (show: boolean) => void;
@@ -31,7 +23,7 @@ export const ContentArea: React.FC<ContentAreaProps> = ({
   currentDisease, searchQuery, setSearchQuery, session, saveContentToCloud, onAddSection, onUpdateDisease, onUpdateSectionTitle, onDeleteSection, onMoveSection, isSidebarOpen, setIsSidebarOpen, setShowAuthModal, signOut
 }) => {
   const [newSectionTitle, setNewSectionTitle] = useState('');
-  const [showAddSec, setShowAddSec] = useState<string | null | boolean>(false); // false, true (root), немесе parentId (ішкі бөлім үшін)
+  const [showAddSec, setShowAddSec] = useState<string | null | boolean>(false);
   const [uploading, setUploading] = useState(false);
 
   const [isEditingDisease, setIsEditingDisease] = useState(false);
@@ -177,7 +169,7 @@ export const ContentArea: React.FC<ContentAreaProps> = ({
     );
   };
 
-  // Рекурсивті түрде бөлімдер мен олардың ішкі бөлімдерін ағаш тәрізді шығару функциясы
+  // Рекурсивті ағаш құрылымы (Орнын ауыстыру, өшіру, ішкі бөлім қосу түймелерімен)
   const renderSectionsTree = (parentId: string | null = null, level: number = 0) => {
     if (!currentDisease || !currentDisease.sections) return null;
     
@@ -232,10 +224,22 @@ export const ContentArea: React.FC<ContentAreaProps> = ({
                 )}
               </div>
 
-              <div className="flex items-center gap-2 print:hidden flex-wrap justify-end">
+              <div className="flex items-center gap-1.5 print:hidden flex-wrap justify-end">
                 {session && (
                   <>
-                    {/* Ішкі бөлім қосу батырмасы */}
+                    {/* Жоғары жылжыту батырмасы */}
+                    {index > 0 && (
+                      <button onClick={() => onMoveSection(currentDisease.sections, section.id, 'up')} className="p-1 text-slate-500 hover:bg-slate-100 rounded-lg" title="Жоғары">
+                        <ArrowUp size={14} />
+                      </button>
+                    )}
+                    {/* Төмен жылжыту батырмасы */}
+                    {index < filteredSections.length - 1 && (
+                      <button onClick={() => onMoveSection(currentDisease.sections, section.id, 'down')} className="p-1 text-slate-500 hover:bg-slate-100 rounded-lg" title="Төмен">
+                        <ArrowDown size={14} />
+                      </button>
+                    )}
+
                     <button 
                       onClick={() => setShowAddSec(section.id)} 
                       className="px-2 py-1 bg-teal-50 hover:bg-teal-100 text-teal-600 rounded-lg text-[11px] font-medium flex items-center gap-1 transition-colors"
@@ -266,7 +270,6 @@ export const ContentArea: React.FC<ContentAreaProps> = ({
               </div>
             </div>
 
-            {/* Бұл бөлімнің ішіне ішкі бөлім қосу формасы */}
             {showAddSec === section.id && (
               <form onSubmit={(e) => handleAddSectionSubmit(e, section.id)} className="p-3 bg-teal-50/50 border border-teal-200 rounded-xl flex flex-col sm:flex-row gap-2 print:hidden">
                 <input 
@@ -284,7 +287,6 @@ export const ContentArea: React.FC<ContentAreaProps> = ({
               </form>
             )}
 
-            {/* Конспект жазу немесе оқу өрісі */}
             {session ? (
               <>
                 <textarea
@@ -307,7 +309,6 @@ export const ContentArea: React.FC<ContentAreaProps> = ({
             )}
           </div>
 
-          {/* Осы бөлімге тиесілі ішкі бөлімдерді рекурсивті түрде шығару */}
           {renderSectionsTree(section.id, level + 1)}
         </div>
       );
@@ -315,7 +316,7 @@ export const ContentArea: React.FC<ContentAreaProps> = ({
   };
 
   return (
-    <main className="flex-1 flex flex-col h-screen overflow-hidden bg-white text-slate-900 transition-all duration-300 print:h-auto print:overflow-visible">
+    <main className="flex-1 flex flex-col min-h-screen bg-white text-slate-900 transition-all duration-300 print:h-auto print:overflow-visible">
       {isEditingDisease && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 print:hidden">
           <div className="bg-white p-6 rounded-2xl w-full max-w-sm shadow-2xl border border-slate-200">
@@ -353,7 +354,6 @@ export const ContentArea: React.FC<ContentAreaProps> = ({
         </div>
       )}
 
-      {/* Жоғарғы панель */}
       <header className="h-14 border-b border-slate-200 px-3 md:px-6 flex items-center justify-between bg-slate-50/50 shrink-0 print:hidden">
         <div className="flex items-center gap-2 md:gap-3">
           <button 
@@ -389,7 +389,8 @@ export const ContentArea: React.FC<ContentAreaProps> = ({
         </div>
       </header>
 
-      <div className="flex-1 overflow-y-auto p-4 md:p-8 max-w-5xl mx-auto w-full space-y-6 print:p-0 print:overflow-visible">
+      {/* Еркін скролл болатын контент аймағы */}
+      <div className="flex-1 p-4 md:p-8 max-w-5xl mx-auto w-full space-y-6 print:p-0">
         {currentDisease ? (
           <>
             <div className="border-b border-slate-200 pb-4 flex flex-col sm:flex-row justify-between items-start sm:items-end gap-3 print:border-b print:border-slate-300">
@@ -428,7 +429,6 @@ export const ContentArea: React.FC<ContentAreaProps> = ({
               </div>
             </div>
 
-            {/* Басты (root) бөлім қосу формасы */}
             {showAddSec === 'root' && (
               <form onSubmit={(e) => handleAddSectionSubmit(e, null)} className="p-4 bg-slate-50 border border-slate-200 rounded-2xl flex flex-col sm:flex-row gap-2 print:hidden">
                 <input 
@@ -446,7 +446,6 @@ export const ContentArea: React.FC<ContentAreaProps> = ({
               </form>
             )}
 
-            {/* Бөлімдерді ағаш тәрізді (nested tree) көрсету */}
             <div className="space-y-4 print:space-y-6">
               {currentDisease.sections && currentDisease.sections.length > 0 ? (
                 renderSectionsTree(null, 0)
@@ -456,7 +455,7 @@ export const ContentArea: React.FC<ContentAreaProps> = ({
             </div>
           </>
         ) : (
-          <div className="h-full flex items-center justify-center text-slate-400">Сол жақтан ауруды таңдаңыз</div>
+          <div className="h-full flex items-center justify-center text-slate-400 py-20">Сол жақтан ауруды таңдаңыз</div>
         )}
       </div>
     </main>
